@@ -10,7 +10,7 @@ import { useState } from "react";
 // import userlogo from "../assets/userlogo.png";
 // import "../assets/bootstrap/css/bootstrap.css";
 
-import 'bootstrap/dist/css/bootstrap.min.css';
+import "bootstrap/dist/css/bootstrap.min.css";
 
 // import "../assets/bootstrap/css/";
 import logo from "../assets/SonaPNGLogo.png";
@@ -49,7 +49,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
     }
   };
 
-  // ✅ GET LIST DATA
+  //GET LIST DATA
   const getCapexData = async () => {
     debugger;
     try {
@@ -64,11 +64,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           "VendorCode",
           "PONumber",
           "TotalamounttobeCapitalized",
-          "Status"
+          "Status",
+          "CurrentApproverId",
+          "CurrentApprover/Title",
+          "CurrentApprover/EMail",
         )
+        .expand("CurrentApprover")
         .orderBy("ID", false)();
-
-
 
       const formatted = items.map((item: any) => ({
         ID: item.ID,
@@ -81,11 +83,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
         VendorCode: item.VendorCode || "",
         PONumber: item.PONumber || "",
         TotalamounttobeCapitalized: item.TotalamounttobeCapitalized || "",
-        status: item.Status || ""
+        status: item.Status || "",
+        CurrentApprover: item.CurrentApprover?.Title || "",
       }));
-
-
-
 
       setData(formatted);
     } catch (error) {
@@ -143,7 +143,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
     }
   };
 
-
   const filteredData = data.filter((item) => {
     const text = searchText.toLowerCase();
     const status = statusFilter.toLowerCase();
@@ -160,19 +159,16 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
 
     return (
       menuFilter &&
-      (
-        item.PaymentId?.toLowerCase().includes(text) ||
+      (item.PaymentId?.toLowerCase().includes(text) ||
         item.EmployeeName?.toLowerCase().includes(text) ||
         item.VendorName?.toLowerCase().includes(text) ||
         item.VendorCode?.toLowerCase().includes(text) ||
-        item.PONumber?.toLowerCase().includes(text)
-      ) &&
+        item.PONumber?.toLowerCase().includes(text)) &&
       (!status || item.status?.toLowerCase().includes(status))
     );
-
   });
 
-  // ✅ LOAD DATA
+  //LOAD DATA
   React.useEffect(() => {
     if (!context) return;
     void getLoggedInUser();
@@ -212,7 +208,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
       return (
         <EditAdvanceForm
           context={context}
-          formData={selectedItem} // ✅ THIS LINE IS MISSING
+          formData={selectedItem}
           onClose={() => {
             setShowForm(false);
             setFormType(null);
@@ -225,7 +221,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
 
   return (
     <>
-
       <div style={{ display: "flex", width: "100%" }}>
         <div className="sidebar">
           <div className="sidehead">
@@ -236,29 +231,55 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           </div>
 
           <div className="sidehead-user">
-            <img src={User} style={{ margin: "10px 20px" }} width={20} height={20} />
+            <img
+              src={User}
+              style={{ margin: "10px 20px" }}
+              width={20}
+              height={20}
+            />
             {currentUserName}
           </div>
 
           <ul className="nav">
             <li className="nav-item">
-              <a className={activeMenu === "My Request" ? " nav-link active" : "nav-link"} onClick={() => setActiveMenu("My Request")} style={{ cursor: "pointer" }}>
+              <a
+                className={
+                  activeMenu === "My Request" ? " nav-link active" : "nav-link"
+                }
+                onClick={() => setActiveMenu("My Request")}
+                style={{ cursor: "pointer" }}
+              >
                 My Request
               </a>
             </li>
             <li className="nav-item">
-              <a className={activeMenu === "Paid" ? " nav-link  active" : "nav-link"} onClick={() => setActiveMenu("Paid")} style={{ cursor: "pointer" }}>
+              <a
+                className={
+                  activeMenu === "Paid" ? " nav-link  active" : "nav-link"
+                }
+                onClick={() => setActiveMenu("Paid")}
+                style={{ cursor: "pointer" }}
+              >
                 Paid
               </a>
             </li>
             <li className="nav-item">
-              <a className={activeMenu === "Rejected" ? "nav-link  active" : "nav-link"} onClick={() => setActiveMenu("Rejected")} style={{ cursor: "pointer" }}>
+              <a
+                className={
+                  activeMenu === "Rejected" ? "nav-link  active" : "nav-link"
+                }
+                onClick={() => setActiveMenu("Rejected")}
+                style={{ cursor: "pointer" }}
+              >
                 Rejected
               </a>
             </li>
           </ul>
         </div>
-        <div className="main" style={{ width: "calc(100% - 250px)", transition: "width 0.3s" }}>
+        <div
+          className="main"
+          style={{ width: "calc(100% - 250px)", transition: "width 0.3s" }}
+        >
           <div className="header">
             <div className="left-banner">
               <div className="logo-text">
@@ -269,20 +290,43 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           <div className="mainsecondapprove">
             <div className="mainsecondsmall">
               <div>
-                <input placeholder="Search" value={searchText} className="form-control" style={{width : "250px", padding : "0px 10px"}} onChange={(e) => setSearchText(e.target.value)} />
+                <input
+                  placeholder="Search"
+                  value={searchText}
+                  className="form-control"
+                  style={{ width: "250px", padding: "0px 10px" }}
+                  onChange={(e) => setSearchText(e.target.value)}
+                />
               </div>
               <div>
-                <select value={statusFilter} className='formtext-control' style={{width : "250px"}}  onChange={(e) => setStatusFilter(e.target.value)}>
+                <select
+                  value={statusFilter}
+                  className="formtext-control"
+                  style={{ width: "250px" }}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
                   <option value="">All</option>
-                  <option value="Submitted">Submitted</option>
-                  <option value="Approved">Approved</option>
+                  <option value="Pending for Approval">
+                    Pending for Approval
+                  </option>
                   <option value="Rejected">Rejected</option>
-                  <option value="Draft">Draft</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Save as Draft">Save as Draft</option>
+                  <option value="Send Back">Send Back</option>
                 </select>
               </div>
             </div>
             <div>
-              <a onClick={() => { setSelectedItem(null); setFormType("new"); setShowForm(true); }} className='create-button'>New Request</a>
+              <a
+                onClick={() => {
+                  setSelectedItem(null);
+                  setFormType("new");
+                  setShowForm(true);
+                }}
+                className="create-button"
+              >
+                New Request
+              </a>
             </div>
           </div>
           <main className="Main-Dash mx-2">
@@ -315,7 +359,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
                     ) : (
                       filteredData.map((item, i) => (
                         <tr key={i}>
-                          <td className="px-4 py-2"
+                          <td
+                            className="px-4 py-2"
                             style={{
                               display: "flex",
                               gap: "10px",
@@ -323,16 +368,23 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
                             }}
                           >
                             {/* View Icon */}
-                            <span onClick={() => handleViewClick(item)} style={{ cursor: "pointer" }}>
+                            <span
+                              onClick={() => handleViewClick(item)}
+                              style={{ cursor: "pointer" }}
+                            >
                               <img src={View} width={15} alt="View" />
                             </span>
 
                             {/* Edit Icon */}
-                            {(item.status === "Draft" || item.status === "Send Back") && (
-                                <span onClick={() => handleEditClick(item)} style={{ cursor: "pointer" }}>
-                                  <img src={Edit} width={15} alt="View" />
-                                </span>
-                              )}
+                            {(item.status?.toLowerCase() === "save as draft" ||
+                              item.status?.toLowerCase() === "send back") && (
+                              <span
+                                onClick={() => handleEditClick(item)}
+                                style={{ cursor: "pointer" }}
+                              >
+                                <img src={Edit} width={15} alt="Edit" />
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-2">{item.PaymentId}</td>
                           <td className="px-4 py-2">{item.EmployeeName}</td>
@@ -341,8 +393,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
                           <td className="px-4 py-2">{item.VendorCode}</td>
                           <td className="px-4 py-2">{item.VendorName}</td>
                           <td className="px-4 py-2">{item.PONumber}</td>
-                          <td className="px-4 py-2">₹ {item.TotalamounttobeCapitalized}</td>
-                          <td className="px-4 py-2">Approver</td>
+                          <td className="px-4 py-2">
+                            ₹ {item.TotalamounttobeCapitalized}
+                          </td>
+                          <td className="px-4 py-2">
+                            {item.CurrentApprover || "-"}
+                          </td>{" "}
                           <td className="px-4 py-2">{item.status}</td>
                         </tr>
                       ))

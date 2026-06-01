@@ -1,6 +1,6 @@
 import * as React from "react";
 import "./advanced.scss";
-
+import Swal from "sweetalert2";
 import { spfi } from "@pnp/sp";
 import { SPFx } from "@pnp/sp/presets/all";
 import { useEffect, useState } from "react";
@@ -53,8 +53,9 @@ const NewAdvanceform = ({ context, onClose }: any) => {
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [gstAdjustment, setGstAdjustment] = useState("");
   const [otherAdjustment, setOtherAdjustment] = useState("");
+  const [approverDetails, setApproverDetails] = useState<any[]>([]);
+  const [approvers, setApprovers] = useState<number[]>([]);
 
-  // Auto calculate Total Project Amount to be Capitalized
   const paidAmount = (
     Number(advanceAmount || 0) +
     Number(gstAdjustment || 0) +
@@ -104,7 +105,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
     }
   };
 
-  // ✅ GET LIST DATA
+  //  GET LIST DATA
   const getCapexData = async () => {
     debugger;
     try {
@@ -173,9 +174,19 @@ const NewAdvanceform = ({ context, onClose }: any) => {
     }
   };
 
-  // ✅ EXIT — uses onClose instead of hardcoded URL
-  const handleExit = () => {
-    onClose();
+  const handleExit = async () => {
+    const result = await Swal.fire({
+      title: "Exit Form?",
+      text: "Any unsaved changes will be lost.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Exit",
+      cancelButtonText: "Cancel",
+    });
+
+    if (result.isConfirmed) {
+      onClose();
+    }
   };
 
   const getLoggedInUser = async () => {
@@ -191,7 +202,9 @@ const NewAdvanceform = ({ context, onClose }: any) => {
           "Division",
           "Location",
           "EmployeeEmail",
+          "ReportingManager/Id",
           "ReportingManager/Title",
+          "HOD/Id",
           "HOD/Title",
           "ContactNo",
           "EmployeeStatus",
@@ -211,55 +224,59 @@ const NewAdvanceform = ({ context, onClose }: any) => {
 
   const buildApprovalFlow = async () => {
     try {
-      const flow: any[] = [];
+      const baseApprovers: any[] = [];
 
-      // 🔥 1. ADD RM
-      if (employee.ReportingManager?.Title) {
-        const rmUser = await sp.web.ensureUser(
-          employee.ReportingManager.Title
-        );
-        flow.push({
-          Id: rmUser.Id,
+      // RM
+      if (employee.ReportingManager?.Id) {
+        baseApprovers.push({
+          Id: employee.ReportingManager.Id,
           Name: employee.ReportingManager.Title,
           Role: "RM",
           Level: 1,
-          Status: "In Progress",
+          status: "Pending",
         });
       }
 
-      // 🔥 2. ADD HOD
-      if (employee.HOD?.Title) {
-        const hodUser = await sp.web.ensureUser(
-          employee.HOD.Title
-        );
-        flow.push({
-          Id: hodUser.Id,
+      // HOD
+      if (employee.HOD?.Id) {
+        baseApprovers.push({
+          Id: employee.HOD.Id,
           Name: employee.HOD.Title,
           Role: "HOD",
           Level: 2,
-          Status: "Pending",
+          status: "",
         });
       }
 
-      // 🔥 3. GET MATRIX APPROVERS
       const matrixData = await sp.web.lists
         .getByTitle("InstallationCommisionApprovalMatrix")
-        .items.select("Role/RoleName,Approver/Id,Approver/Title,Level/Level")
+        .items.select(
+          "Role/RoleName",
+          "Approver/Id",
+          "Approver/Title",
+          "Level/Level",
+        )
         .expand("Role", "Approver", "Level")
         .filter("Status eq 'Active'")
         .orderBy("Level", true)();
 
-      const matrixApprovers = matrixData.map(
-        (item: any, index: number) => ({
-          Id: item.Approver?.Id,
-          Name: item.Approver?.Title,
-          Role: item.Role?.RoleName,
-          Level: flow.length + index + 1,
-          Status: "Pending",
-        })
-      );
+      const matrixApprovers = matrixData.map((item: any, index: number) => ({
+        Id: item.Approver?.Id,
+        Name: item.Approver?.Title,
+        Role: item.Role?.RoleName,
+        Level: baseApprovers.length + index + 1,
+        status: "",
+      }));
 
-      const fullFlow = [...flow, ...matrixApprovers];
+      const fullFlow = [...baseApprovers, ...matrixApprovers];
+
+      if (fullFlow.length > 0) {
+        fullFlow[0].status = "Pending";
+      }
+
+      setApproverDetails(fullFlow);
+      setApprovers(fullFlow.map((a) => a.Id));
+
       return fullFlow;
     } catch (error) {
       console.error("Approval Flow Error:", error);
@@ -278,42 +295,41 @@ const NewAdvanceform = ({ context, onClose }: any) => {
     const today = new Date();
     const year = today.getFullYear();
     const month = today.getMonth() + 1;
+
     if (month >= 4) {
-      return `${year.toString().slice(-2)}-${(year + 1).toString().slice(-2)}`;
-    } else {
-      return `${(year - 1).toString().slice(-2)}-${year.toString().slice(-2)}`;
+      return (year + 1).toString().slice(-2);
     }
+
+    return year.toString().slice(-2);
   };
 
-  const generatePaymentId = async () => {
+  const generatePaymentId = async (): Promise<string> => {
     try {
       const fy = getFinancialYear();
 
-      const items = await sp.web.lists
-        .getByTitle("Installation")
-        .items.select("PaymentId", "ID")
-        .filter(`startswith(PaymentId,'INT/${fy}/')`)
-        .orderBy("ID", false)
+      const incrementalData = await sp.web.lists
+        .getByTitle("InstallationIncrementalID")
+        .items.select("Id", "IncrementalID")
+        .orderBy("Id", false)
         .top(1)();
 
       let nextNumber = 1;
 
-      if (items.length > 0 && items[0].PaymentId) {
-        const lastId = items[0].PaymentId;
-        const parts = lastId.split("/");
-        if (parts.length === 3) {
-          const lastNumber = parseInt(parts[2]);
-          if (!isNaN(lastNumber)) {
-            nextNumber = lastNumber + 1;
-          }
-        }
+      if (incrementalData.length > 0 && incrementalData[0].IncrementalID) {
+        nextNumber = Number(incrementalData[0].IncrementalID) + 1;
       }
 
-      const formattedNumber = nextNumber.toString().padStart(5, "0");
-      return `INT/${fy}/${formattedNumber}`;
+      const paddedNumber = nextNumber.toString().padStart(5, "0");
+
+      await sp.web.lists.getByTitle("InstallationIncrementalID").items.add({
+        Title: `INT-${nextNumber}`,
+        IncrementalID: nextNumber.toString(),
+      });
+
+      return `INT/${fy}/${paddedNumber}`;
     } catch (error) {
-      alert(error);
-      console.error("Capex ID Error:", error);
+      console.error("Generate Payment ID Error:", error);
+
       return `INT/${getFinancialYear()}/00001`;
     }
   };
@@ -335,24 +351,35 @@ const NewAdvanceform = ({ context, onClose }: any) => {
           .files.addUsingPath(file.name, file, { Overwrite: true });
       }
 
-      console.log("✅ Files uploaded successfully");
+      console.log("Files uploaded successfully");
     } catch (error) {
-      console.error("❌ Upload error:", error);
+      console.error("Upload error:", error);
     }
   };
 
-  const validateForm = () => {
+  const validateForm = (): string[] => {
     const errors: string[] = [];
 
     if (!selectedVendorId) {
-      errors.push("Please select the Vendor code");
+      errors.push("Vendor Code is required");
     }
+
+    if (!selectedVendorName) {
+      errors.push("Vendor Name is required");
+    }
+
     if (!poNumber) {
-      errors.push("Please update PO Number");
+      errors.push("PO Number is required");
     }
-    if (!paidAmount || Number(paidAmount) <= 0) {
-      errors.push("Please update Total Payment");
+
+    if (!poDate) {
+      errors.push("PO Date is required");
     }
+
+    if (!advanceAmount || Number(advanceAmount) <= 0) {
+      errors.push("Total Payment for the Project must be greater than zero");
+    }
+
     if (!attachments || attachments.length === 0) {
       errors.push("Please upload at least one attachment");
     }
@@ -360,25 +387,46 @@ const NewAdvanceform = ({ context, onClose }: any) => {
     return errors;
   };
 
-  // ✅ SUBMIT — uses onClose instead of hardcoded URL
   const handleSubmit = async () => {
     try {
-      debugger;
       const errors = validateForm();
+
       if (errors.length > 0) {
-        alert(errors.join("\n"));
+        await Swal.fire({
+          title: "Validation",
+          html: errors.map((e) => `• ${e}`).join("<br/>"),
+          icon: "error",
+        });
+
         return;
       }
 
-      const PaymentId = await generatePaymentId();
-      const fields = await sp.web.lists
-        .getByTitle("Installation")
-        .fields.filter("InternalName eq 'PaymentId'")();
+      const confirmSubmit = await Swal.fire({
+        title: "Submit Request?",
+        text: "Are you sure you want to submit this Installation Commissioning Request?",
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Submit",
+        cancelButtonText: "Cancel",
+      });
 
-      console.log("Fields:", fields);
+      if (!confirmSubmit.isConfirmed) return;
+
+      Swal.fire({
+        title: "Submitting...",
+        text: "Please wait",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      const PaymentId = await generatePaymentId();
 
       const flow = await buildApprovalFlow();
+
       const currentApproverId = flow.length > 0 ? flow[0].Id : null;
+
       const history = [
         {
           CurrentApprover: employee.EmployeeName,
@@ -404,6 +452,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
         EmployeeStatus: employee.EmployeeStatus || "",
 
         VendorCode: selectedVendorId ? selectedVendorId.toString() : "",
+
         VendorName: selectedVendorName || "",
 
         PONumber: poNumber || "",
@@ -416,34 +465,61 @@ const NewAdvanceform = ({ context, onClose }: any) => {
         OtherAdjustmentifany: otherAdjustment || "0",
         TotalamounttobeCapitalized: paidAmount || "0",
 
-        Status: "Pending for Approver",
+        Status: "Pending for Approval",
         ApprovalMatrix: JSON.stringify(flow),
         CurrentApproverId: currentApproverId,
         WorkFlowHistory: JSON.stringify(history),
       });
 
-      debugger;
       await uploadAttachments(PaymentId);
 
-      console.log("Attachments:", attachments);
-      alert("Submitted successfully ✅");
+      await Swal.fire({
+        title: "Success",
+        text: "Request submitted successfully.",
+        icon: "success",
+        confirmButtonText: "OK",
+      });
 
-      // ✅ Navigate back to dashboard via onClose
       onClose();
-    } catch (error) {
-      console.error("ERROR:", error);
-      alert(error);
+    } catch (error: any) {
+      console.error(error);
+
+      await Swal.fire({
+        title: "Submission Failed",
+        text: error?.message || "Something went wrong",
+        icon: "error",
+      });
     }
   };
 
-  // ✅ DRAFT — uses onClose instead of hardcoded URL
   const handledraft = async () => {
     try {
-      debugger;
+      const confirmDraft = await Swal.fire({
+        title: "Save as Draft?",
+        text: "Do you want to save this request as Draft?",
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Save Draft",
+        cancelButtonText: "Cancel",
+      });
+
+      if (!confirmDraft.isConfirmed) return;
+
+      Swal.fire({
+        title: "Saving Draft...",
+        text: "Please wait",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
       const PaymentId = await generatePaymentId();
 
       const flow = await buildApprovalFlow();
+
       const currentApproverId = flow.length > 0 ? flow[0].Id : null;
+
       const history = [
         {
           CurrentApprover: employee.EmployeeName,
@@ -469,9 +545,10 @@ const NewAdvanceform = ({ context, onClose }: any) => {
         EmployeeStatus: employee.EmployeeStatus || "",
 
         VendorCode: selectedVendorId ? selectedVendorId.toString() : "",
+
         VendorName: selectedVendorName || "",
 
-        PONumber: poNumber ? poNumber.toString() : "",
+        PONumber: poNumber || "",
         POdate: poDate ? new Date(poDate) : null,
         POPaymentTerms: poTerms || "",
         POAmount: poAmount || "",
@@ -481,21 +558,32 @@ const NewAdvanceform = ({ context, onClose }: any) => {
         OtherAdjustmentifany: otherAdjustment || "0",
         TotalamounttobeCapitalized: paidAmount || "0",
 
-        Status: "Draft",
+        Status: "Save as Draft",
         ApprovalMatrix: JSON.stringify(flow),
         CurrentApproverId: currentApproverId,
         WorkFlowHistory: JSON.stringify(history),
       });
 
-      await uploadAttachments(PaymentId);
+      if (attachments.length > 0) {
+        await uploadAttachments(PaymentId);
+      }
 
-      alert("Draft saved successfully ✅");
+      await Swal.fire({
+        title: "Draft Saved",
+        text: "Request saved successfully as Draft.",
+        icon: "success",
+        confirmButtonText: "OK",
+      });
 
-      // ✅ Navigate back to dashboard via onClose
       onClose();
-    } catch (error) {
-      console.error("ERROR:", error);
-      alert("ERROR");
+    } catch (error: any) {
+      console.error(error);
+
+      await Swal.fire({
+        title: "Draft Save Failed",
+        text: error?.message || "Something went wrong",
+        icon: "error",
+      });
     }
   };
 
@@ -508,61 +596,117 @@ const NewAdvanceform = ({ context, onClose }: any) => {
     void getPaidPOs();
   }, [context]);
 
+  React.useEffect(() => {
+    if (employee?.EmployeeCode) {
+      void buildApprovalFlow();
+    }
+  }, [employee]);
+
   return (
-    <div className='MainUplodForm' style={{ margin: "5px 0px" }}>
-      <div className='row'>
-        <div className='col-md-12'>
-          <div className='Main-Boxpoup'>
+    <div className="MainUplodForm" style={{ margin: "5px 0px" }}>
+      <div className="row">
+        <div className="col-md-12">
+          <div className="Main-Boxpoup">
             {/* 🔹 Header */}
             <div className="bordered">
               <img src={logo} />
               <h1> Installation Commisioning Request </h1>
             </div>
-            <div className='borderedbox'>
+            {/* Approval Ribbon */}
+            <div className="approval-ribbon">
+              {/* Initiator */}
+              <div className="ribbon-step current">
+                {employee.EmployeeName || "Initiator"}
+              </div>
+
+              {/* Dynamic Approvers */}
+              {approverDetails.map((approver, index) => (
+                <div
+                  key={index}
+                  className={`ribbon-step ${
+                    approver.status === "Pending" ? "pending" : "pending"
+                  }`}
+                >
+                  {approver.Name}
+                </div>
+              ))}
+            </div>
+            <div className="borderedbox">
               <div className="heading1" style={{ marginTop: "10px" }}>
                 <label>Requestor Information</label>
               </div>
-              <div className='main-formcontainer'>
-                <div className='row mb-20'>
-                  <div className='col-md-4'>
-                    <label htmlFor="Employee Code" className='font'>Employee Code</label> : &nbsp;&nbsp;
-                    <label className='fonttext'>{employee.EmployeeCode}</label>
+              <div className="main-formcontainer">
+                <div className="row mb-20">
+                  <div className="col-md-4">
+                    <label htmlFor="Employee Code" className="font">
+                      Employee Code
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">{employee.EmployeeCode}</label>
                   </div>
-                  <div className='col-md-4'>
-                    <label htmlFor="Employee Name" className='font'>Employee Name </label> : &nbsp;&nbsp;
-                    <label className='fonttext'>{employee.EmployeeName}</label>
+                  <div className="col-md-4">
+                    <label htmlFor="Employee Name" className="font">
+                      Employee Name{" "}
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">{employee.EmployeeName}</label>
                   </div>
-                  <div className='col-md-4'>
-                    <label htmlFor="Employee Email" className='font'>Employee Email </label> : &nbsp;&nbsp;
-                    <label className='fonttext'>{employee.EmployeeEmail}</label>
-                  </div>
-                </div>
-                <div className='row mb-20'>
-                  <div className='col-md-4'>
-                    <label htmlFor="Contact No" className='font'>Contact No</label> : &nbsp;&nbsp;
-                    <label className='fonttext'>{employee.ContactNo}</label>
-                  </div>
-                  <div className='col-md-4'>
-                    <label htmlFor="Employee Status" className='font'>Employee Status</label> : &nbsp;&nbsp;
-                    <label className='fonttext'>{employee.EmployeeStatus}</label>
-                  </div>
-                  <div className='col-md-4'>
-                    <label htmlFor="Division" className='font'>Division</label> : &nbsp;&nbsp;
-                    <label className='fonttext'>{employee.Division}</label>
+                  <div className="col-md-4">
+                    <label htmlFor="Employee Email" className="font">
+                      Employee Email{" "}
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">{employee.EmployeeEmail}</label>
                   </div>
                 </div>
-                <div className='row mb-20'>
-                  <div className='col-md-4'>
-                    <label htmlFor="Location" className='font'>Location</label> : &nbsp;&nbsp;
-                    <label className='fonttext'>{employee.Location}</label>
+                <div className="row mb-20">
+                  <div className="col-md-4">
+                    <label htmlFor="Contact No" className="font">
+                      Contact No
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">{employee.ContactNo}</label>
                   </div>
-                  <div className='col-md-4'>
-                    <label htmlFor="RM" className='font'>RM</label> : &nbsp;&nbsp;
-                    <label className='fonttext'>{employee.ReportingManager?.Title}</label>
+                  <div className="col-md-4">
+                    <label htmlFor="Employee Status" className="font">
+                      Employee Status
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">
+                      {employee.EmployeeStatus}
+                    </label>
                   </div>
-                  <div className='col-md-4'>
-                    <label htmlFor="HOD" className='font'>HOD</label> : &nbsp;&nbsp;
-                    <label className='fonttext'>{employee.HOD?.Title}</label>
+                  <div className="col-md-4">
+                    <label htmlFor="Division" className="font">
+                      Division
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">{employee.Division}</label>
+                  </div>
+                </div>
+                <div className="row mb-20">
+                  <div className="col-md-4">
+                    <label htmlFor="Location" className="font">
+                      Location
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">{employee.Location}</label>
+                  </div>
+                  <div className="col-md-4">
+                    <label htmlFor="RM" className="font">
+                      RM
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">
+                      {employee.ReportingManager?.Title}
+                    </label>
+                  </div>
+                  <div className="col-md-4">
+                    <label htmlFor="HOD" className="font">
+                      HOD
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">{employee.HOD?.Title}</label>
                   </div>
                 </div>
               </div>
@@ -570,10 +714,10 @@ const NewAdvanceform = ({ context, onClose }: any) => {
               <div className="heading1" style={{ marginTop: "10px" }}>
                 <label>Vendor & PO Details</label>
               </div>
-              <div className='main-formcontainer'>
+              <div className="main-formcontainer">
                 <div className="row mb-20">
                   <div className="col-md-4">
-                    <label className='font'>Vendor Code</label>
+                    <label className="font">Vendor Code</label>
                     <select
                       value={selectedVendorId || ""}
                       onChange={(e) => {
@@ -581,9 +725,11 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                         const vendor = vendors.find((v) => v.Id === id);
                         setSelectedVendorId(id);
                         setSelectedVendorName(vendor?.VendorName || "");
-                        if (id) { void getPreviousAdvances(id); }
+                        if (id) {
+                          void getPreviousAdvances(id);
+                        }
                       }}
-                      className='formtext-control'
+                      className="formtext-control"
                     >
                       <option value="">Select Vendor</option>
                       {vendors.map((v) => (
@@ -594,14 +740,17 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                     </select>
                   </div>
                   <div className="col-md-4">
-                    <label className='font'>Vendor Name</label>
-                    <input value={selectedVendorName} className='form-control readonly' />
+                    <label className="font">Vendor Name</label>
+                    <input
+                      value={selectedVendorName}
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
-                    <label className='font'>PO Number</label>
+                    <label className="font">PO Number</label>
                     <select
                       value={poNumber}
-                      className='formtext-control'
+                      className="formtext-control"
                       onChange={(e) => {
                         const selectedPO = poList.find(
                           (item) => item.PONumber === e.target.value,
@@ -610,7 +759,9 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                         if (selectedPO) {
                           setPoDate(
                             selectedPO.PODate
-                              ? new Date(selectedPO.PODate).toISOString().split("T")[0]
+                              ? new Date(selectedPO.PODate)
+                                  .toISOString()
+                                  .split("T")[0]
                               : "",
                           );
                           setPoTerms(selectedPO.POAdvanceTerms || "");
@@ -629,41 +780,53 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                 </div>
                 <div className="row mb-20">
                   <div className="col-md-4">
-                    <label className='font'>PO Date</label>
-                    <input type="date" value={poDate} className='form-control readonly' />
+                    <label className="font">PO Date</label>
+                    <input
+                      type="date"
+                      value={poDate}
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
-                    <label className='font'>PO Payment Terms</label>
-                    <input value={poTerms} className='form-control readonly' />
+                    <label className="font">PO Payment Terms</label>
+                    <input value={poTerms} className="form-control readonly" />
                   </div>
                   <div className="col-md-4">
-                    <label className='font'>PO Amount (GST)</label>
-                    <input value={poAmount} className='form-control readonly' />
+                    <label className="font">PO Amount (GST)</label>
+                    <input value={poAmount} className="form-control readonly" />
                   </div>
                 </div>
                 <div className="row mb-20">
                   <div className="col-md-4">
-                    <label className="font">Total Payment for the Project</label>
+                    <label className="font">
+                      Total Payment for the Project
+                    </label>
                     <input
                       value={advanceAmount}
-                      className='form-control'
-                      onChange={(e) => handleNumberChange(e.target.value, setAdvanceAmount)}
+                      className="form-control"
+                      onChange={(e) =>
+                        handleNumberChange(e.target.value, setAdvanceAmount)
+                      }
                     />
                   </div>
                   <div className="col-md-4">
                     <label className="font">Gst Adjustment(Any)</label>
                     <input
                       value={gstAdjustment}
-                      className='form-control'
-                      onChange={(e) => handleNumberChange(e.target.value, setGstAdjustment)}
+                      className="form-control"
+                      onChange={(e) =>
+                        handleNumberChange(e.target.value, setGstAdjustment)
+                      }
                     />
                   </div>
                   <div className="col-md-4">
                     <label className="font">Other Adjustment</label>
                     <input
                       value={otherAdjustment}
-                      className='form-control'
-                      onChange={(e) => handleNumberChange(e.target.value, setOtherAdjustment)}
+                      className="form-control"
+                      onChange={(e) =>
+                        handleNumberChange(e.target.value, setOtherAdjustment)
+                      }
                     />
                   </div>
                 </div>
@@ -672,7 +835,10 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                     <label className="font" style={{ color: "red" }}>
                       Total Project Amount to be Capitalized
                     </label>
-                    <input value={paidAmount} className='form-control readonly' />
+                    <input
+                      value={paidAmount}
+                      className="form-control readonly"
+                    />
                   </div>
                 </div>
               </div>
@@ -680,7 +846,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
               <div className="heading1" style={{ marginTop: "10px" }}>
                 <label>Past MRN Details</label>
               </div>
-              <div className='main-formcontainer'>
+              <div className="main-formcontainer">
                 <div className="row mb-20">
                   <div className="col-md-12">
                     <div style={{ overflowX: "auto" }}>
@@ -710,26 +876,38 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                               const pending = Math.max(
                                 0,
                                 Number(item.RequestAdvanceAmount || 0) -
-                                Number(item.PaidAmount || 0),
+                                  Number(item.PaidAmount || 0),
                               );
                               return (
                                 <tr key={index}>
                                   <td className="px-4 py-2">{item.PONumber}</td>
-                                  <td className="px-4 py-2">{item.RequestAdvanceAmount}</td>
+                                  <td className="px-4 py-2">
+                                    {item.RequestAdvanceAmount}
+                                  </td>
                                   <td className="px-4 py-2">
                                     {item.Created
-                                      ? new Date(item.Created).toLocaleDateString()
+                                      ? new Date(
+                                          item.Created,
+                                        ).toLocaleDateString()
                                       : ""}
                                   </td>
                                   <td className="px-4 py-2">
                                     {item.VoucherDate
-                                      ? new Date(item.VoucherDate).toLocaleDateString()
+                                      ? new Date(
+                                          item.VoucherDate,
+                                        ).toLocaleDateString()
                                       : ""}
                                   </td>
-                                  <td className="px-4 py-2">{item.VoucherNumber}</td>
-                                  <td className="px-4 py-2">{item.PaidAmount}</td>
+                                  <td className="px-4 py-2">
+                                    {item.VoucherNumber}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    {item.PaidAmount}
+                                  </td>
                                   <td className="px-4 py-2">{pending}</td>
-                                  <td className="px-4 py-2">{item.PaidAmount}</td>
+                                  <td className="px-4 py-2">
+                                    {item.PaidAmount}
+                                  </td>
                                   <td className="px-4 py-2">{pending}</td>
                                 </tr>
                               );
@@ -745,7 +923,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
               <div className="heading1" style={{ marginTop: "10px" }}>
                 <label>Advance History(to be PO Specific)</label>
               </div>
-              <div className='main-formcontainer'>
+              <div className="main-formcontainer">
                 <div className="row mb-20">
                   <div className="col-md-12">
                     <div style={{ overflowX: "auto" }}>
@@ -773,24 +951,34 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                               const pending = Math.max(
                                 0,
                                 Number(item.RequestAdvanceAmount || 0) -
-                                Number(item.PaidAmount || 0),
+                                  Number(item.PaidAmount || 0),
                               );
                               return (
                                 <tr key={index}>
                                   <td className="px-4 py-2">{item.PONumber}</td>
-                                  <td className="px-4 py-2">{item.RequestAdvanceAmount}</td>
+                                  <td className="px-4 py-2">
+                                    {item.RequestAdvanceAmount}
+                                  </td>
                                   <td className="px-4 py-2">
                                     {item.Created
-                                      ? new Date(item.Created).toLocaleDateString()
+                                      ? new Date(
+                                          item.Created,
+                                        ).toLocaleDateString()
                                       : ""}
                                   </td>
                                   <td className="px-4 py-2">
                                     {item.VoucherDate
-                                      ? new Date(item.VoucherDate).toLocaleDateString()
+                                      ? new Date(
+                                          item.VoucherDate,
+                                        ).toLocaleDateString()
                                       : ""}
                                   </td>
-                                  <td className="px-4 py-2">{item.VoucherNumber}</td>
-                                  <td className="px-4 py-2">{item.PaidAmount}</td>
+                                  <td className="px-4 py-2">
+                                    {item.VoucherNumber}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    {item.PaidAmount}
+                                  </td>
                                   <td className="px-4 py-2">{pending}</td>
                                 </tr>
                               );
@@ -806,7 +994,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
               <div className="heading1" style={{ marginTop: "10px" }}>
                 <label>Upload Docuement</label>
               </div>
-              <div className='main-formcontainer'>
+              <div className="main-formcontainer">
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">Attachment</label>
@@ -824,19 +1012,38 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                 </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "center", gap: "5px", marginBottom: "1rem", marginTop: "1rem" }}>
-                {/* ✅ Submit — onClose navigates back to dashboard */}
-                <a onClick={handleSubmit} className="submit-btn">
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  gap: "5px",
+                  marginBottom: "1rem",
+                  marginTop: "1rem",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => void handleSubmit()}
+                  className="submit-btn"
+                >
                   Submit
-                </a>
-                {/* ✅ Draft — onClose navigates back to dashboard */}
-                <a onClick={handledraft} className="Rework-btn">
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handledraft()}
+                  className="Rework-btn"
+                >
                   Save as Draft
-                </a>
-                {/* ✅ Exit — onClose navigates back to dashboard */}
-                <a onClick={handleExit} className="reset-btn">
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handleExit()}
+                  className="reset-btn"
+                >
                   Exit
-                </a>
+                </button>
               </div>
             </div>
           </div>

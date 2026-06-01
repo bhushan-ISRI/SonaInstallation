@@ -58,6 +58,9 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
   const [voucherNumber, setVoucherNumber] = useState("");
   const [UTRDate, setUTRDate] = useState("");
   const [UTRNumber, setUTRNumber] = useState("");
+  //Approval Flow
+  const [approverDetails, setApproverDetails] = useState<any[]>([]);
+  const [approvers, setApprovers] = useState<number[]>([]);
 
   const peoplePickerContext: IPeoplePickerContext = {
     absoluteUrl: context.pageContext.web.absoluteUrl,
@@ -100,7 +103,9 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
           "Division",
           "Location",
           "EmployeeEmail",
+          "ReportingManager/Id",
           "ReportingManager/Title",
+          "HOD/Id",
           "HOD/Title",
           "ContactNo",
           "EmployeeStatus",
@@ -115,6 +120,68 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
       }
     } catch (error) {
       console.log("Error fetching user:", error);
+    }
+  };
+
+  const buildApprovalFlow = async () => {
+    try {
+      const baseApprovers: any[] = [];
+
+      // RM
+      if (employee.ReportingManager?.Id) {
+        baseApprovers.push({
+          Id: employee.ReportingManager.Id,
+          Name: employee.ReportingManager.Title,
+          Role: "RM",
+          Level: 1,
+          status: "Pending",
+        });
+      }
+
+      // HOD
+      if (employee.HOD?.Id) {
+        baseApprovers.push({
+          Id: employee.HOD.Id,
+          Name: employee.HOD.Title,
+          Role: "HOD",
+          Level: 2,
+          status: "",
+        });
+      }
+
+      const matrixData = await sp.web.lists
+        .getByTitle("InstallationCommisionApprovalMatrix")
+        .items.select(
+          "Role/RoleName",
+          "Approver/Id",
+          "Approver/Title",
+          "Level/Level",
+        )
+        .expand("Role", "Approver", "Level")
+        .filter("Status eq 'Active'")
+        .orderBy("Level", true)();
+
+      const matrixApprovers = matrixData.map((item: any, index: number) => ({
+        Id: item.Approver?.Id,
+        Name: item.Approver?.Title,
+        Role: item.Role?.RoleName,
+        Level: baseApprovers.length + index + 1,
+        status: "",
+      }));
+
+      const fullFlow = [...baseApprovers, ...matrixApprovers];
+
+      if (fullFlow.length > 0) {
+        fullFlow[0].status = "Pending";
+      }
+
+      setApproverDetails(fullFlow);
+      setApprovers(fullFlow.map((a) => a.Id));
+
+      return fullFlow;
+    } catch (error) {
+      console.error("Approval Flow Error:", error);
+      return [];
     }
   };
 
@@ -284,6 +351,10 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
         selectedUser[0]?.secondaryText,
       );
 
+      const flow = await buildApprovalFlow();
+
+      const currentApproverId = flow.length > 0 ? flow[0].Id : null;
+
       await sp.web.lists
         .getByTitle("Installation")
         .items.getById(formData.ID)
@@ -314,6 +385,8 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
           GSTAdjustmentifAny: GSTAdjustmentifAny || "0",
           OtherAdjustmentifany: OtherAdjustmentifany || "0",
           TotalamounttobeCapitalized: totalCapitalized.toString(),
+          ApprovalMatrix: JSON.stringify(flow),
+          CurrentApproverId: currentApproverId,
 
           Status: "Pending for Approver",
         });
@@ -376,6 +449,12 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
     void getVendors();
   }, []);
 
+  useEffect(() => {
+    if (employee?.EmployeeCode) {
+      void buildApprovalFlow();
+    }
+  }, [employee]);
+
   // =========================
   // UI
   // =========================
@@ -388,6 +467,23 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
             <div className="bordered">
               <img src={logo} />
               <h1> Edit Advance Payment </h1>
+            </div>
+            {/* Approval Ribbon */}
+            <div className="approval-ribbon">
+              <div className="ribbon-step current">
+                {employee.EmployeeName || "Initiator"}
+              </div>
+
+              {approverDetails.map((approver, index) => (
+                <div
+                  key={index}
+                  className={`ribbon-step ${
+                    approver.status === "Pending" ? "pending" : "pending"
+                  }`}
+                >
+                  {approver.Name}
+                </div>
+              ))}
             </div>
             <div className="borderedbox">
               <div className="heading1" style={{ marginTop: "10px" }}>

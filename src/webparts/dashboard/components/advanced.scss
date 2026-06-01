@@ -7,6 +7,109 @@
 h2 {
   margin-bottom: 20px;
 }
+// ─────────────────────────────────────────────────────────────
+//  APPROVAL RIBBON
+// ─────────────────────────────────────────────────────────────
+.approval-ribbon {
+  background-color: #000000 !important;
+  color: #000 !important;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.ribbon-step {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 20px) 0,
+    100% 25px,
+    calc(100% - 20px) 50px,
+    0 50px,
+    20px 25px
+  );
+
+  display: block;
+  flex: 1;
+
+  background-color: #bdbdbd;
+
+  color: #fff;
+
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+
+  height: 50px;
+  line-height: 50px;
+
+  margin: 8px 0;
+
+  overflow: hidden;
+
+  padding: 0 20px 0 30px;
+
+  position: relative;
+
+  text-align: center;
+
+  text-decoration: none;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  z-index: 1;
+}
+
+/* INITIATOR */
+
+.ribbon-step.initiator {
+  background-color: #16a34a;
+  color: #fff;
+}
+
+/* APPROVED */
+
+.ribbon-step.approved {
+  background-color: #16a34a;
+  color: #fff;
+}
+
+/* CURRENT APPROVER */
+
+.ribbon-step.current {
+  background-color: #f59e0b;
+  color: #fff;
+}
+
+/* PENDING */
+
+.ribbon-step.pending {
+  background-color: #bdbdbd;
+  color: #1f2937;
+}
+
+/* ONLY REJECTED */
+
+.ribbon-step.rejected {
+  background-color: #dc2626;
+  color: #fff;
+}
+
+.ribbon-step:before {
+  content: "";
+
+  position: absolute;
+
+  top: 0;
+  left: 0;
+
+  border-top: 18px solid transparent;
+  border-bottom: 17px solid transparent;
+  border-left: 16px solid #fff;
+}
+//------------END OF APPROVAL RIBBON-----------------
 
 .card {
   background: #fff;
