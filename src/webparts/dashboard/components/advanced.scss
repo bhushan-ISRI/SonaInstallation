@@ -371,6 +371,17 @@ label {
   pointer-events: none;
 }
 
+.draft-btn {
+  padding: 6px 16px;
+  background: #0078d4;
+  color: rgb(255, 255, 255) !important;
+  font-size: 14px;
+  border: 1px solid #0078d4;
+  border-radius: 5px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
 .submit-btn {
   padding: 6px 16px;
   background: green;

@@ -375,68 +375,69 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
   // UPDATE
   // =========================
 
-  const handleSubmit = async () => {
+  const handleSave = async (
+    status: "Save as Draft" | "Pending for Approval",
+  ) => {
     try {
-      const errors = validateForm();
-      if (errors.length > 0) {
-        alert(errors.join("\n"));
-        return;
-      }
+      const confirmation =
+        status === "Save as Draft"
+          ? await Swal.fire({
+              title: "Save as Draft?",
+              text: "Do you want to save this request as Draft?",
+              icon: "question",
+              showCancelButton: true,
+              confirmButtonText: "Save Draft",
+              cancelButtonText: "Cancel",
+            })
+          : await Swal.fire({
+              title: "Submit Request?",
+              text: "Do you want to submit this request for approval?",
+              icon: "question",
+              showCancelButton: true,
+              confirmButtonText: "Submit",
+              cancelButtonText: "Cancel",
+            });
 
-      const ensuredUser = await sp.web.ensureUser(
-        selectedUser[0]?.secondaryText,
-      );
+      if (!confirmation.isConfirmed) return;
 
       const flow = await buildApprovalFlow();
 
-      const currentApproverId = flow.length > 0 ? flow[0].Id : null;
+      const currentApproverId =
+        status === "Pending for Approval" && flow.length > 0
+          ? flow[0].Id
+          : null;
 
       await sp.web.lists
         .getByTitle("Installation")
         .items.getById(formData.ID)
         .update({
-          Title: formData.PaymentId,
-          PaymentId: formData.PaymentId,
-
-          EmployeeCode: employee.EmployeeCode || "",
-          EmployeeName: employee.EmployeeName || "",
-          Division: employee.Division || "",
-          Location: employee.Location || "",
-          Email: employee.EmployeeEmail || "",
-
-          ReportingManager: employee.ReportingManager?.Title || "",
-          HOD: employee.HOD?.Title || "",
-          ContactNo: employee.ContactNo || "",
-          EmployeeStatus: employee.EmployeeStatus || "",
-
-          VendorCode: selectedVendorCode,
-          VendorName: selectedVendorName || "",
-
-          PONumber: PONumber || "",
-          POdate: POdate ? new Date(POdate) : null,
-          POPaymentTerms: POPaymentTerms || "",
-          POAmount: POAmount || "",
-
-          TotalPaymentofProject: TotalPaymentofProject || "0",
-          GSTAdjustmentifAny: GSTAdjustmentifAny || "0",
-          OtherAdjustmentifany: OtherAdjustmentifany || "0",
-          TotalamounttobeCapitalized: totalCapitalized.toString(),
+          Status: status,
           ApprovalMatrix: JSON.stringify(flow),
           CurrentApproverId: currentApproverId,
-
-          Status: "Pending for Approval",
         });
 
       if (selectedFiles.length > 0) {
         await uploadFiles();
       }
 
-      alert("Updated successfully");
+      await Swal.fire({
+        title: "Success",
+        text:
+          status === "Save as Draft"
+            ? "Draft Saved Successfully"
+            : "Submitted Successfully",
+        icon: "success",
+      });
 
       onClose();
-    } catch (e) {
-      console.error(e);
-      alert("Error ❌");
+    } catch (error) {
+      console.error(error);
+
+      await Swal.fire({
+        title: "Error",
+        text: "Something went wrong.",
+        icon: "error",
+      });
     }
   };
 
@@ -505,9 +506,7 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
     }
   }, [employee]);
 
-  // =========================
   // UI
-  // =========================
   return (
     <div className="MainUplodForm" style={{ margin: "5px 0px" }}>
       <div className="row">
@@ -823,17 +822,34 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
                 style={{
                   display: "flex",
                   justifyContent: "center",
-                  gap: "5px",
+                  gap: "10px",
                   marginBottom: "1rem",
                   marginTop: "1rem",
                 }}
               >
-                <a onClick={handleSubmit} className="submit-btn">
-                  Update
-                </a>
-                <a onClick={handleExit} className="reset-btn">
+                <button
+                  type="button"
+                  className="draft-btn"
+                  onClick={() => handleSave("Save as Draft")}
+                >
+                  Save as Draft
+                </button>
+
+                <button
+                  type="button"
+                  className="submit-btn"
+                  onClick={() => handleSave("Pending for Approval")}
+                >
+                  Submit
+                </button>
+
+                <button
+                  type="button"
+                  className="reset-btn"
+                  onClick={handleExit}
+                >
                   Exit
-                </a>
+                </button>
               </div>
             </div>
           </div>
