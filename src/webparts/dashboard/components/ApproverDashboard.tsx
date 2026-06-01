@@ -41,7 +41,7 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
   const [currentUserName, setCurrentUserName] = React.useState("");
   const [selectedItem, setSelectedItem] = React.useState<any>(null);
 
-  // ✅ GET CURRENT USER
+  // GET CURRENT USER
   const getLoggedInUser = async () => {
     try {
       const user = await sp.web.currentUser();
@@ -68,7 +68,7 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
     }
   };
 
-  // ✅ GET LIST DATA
+  //GET LIST DATA
   const getCapexData = async () => {
     try {
       debugger;
@@ -85,8 +85,7 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           "TotalamounttobeCapitalized",
           "Status",
         )
-        // .expand("VendorCode") // ✅ ADD THIS LINE
-        .filter(`Status eq 'Pending for Approver'`)
+        .filter(`Status eq 'Pending for Approval'`)
         .orderBy("ID", false)();
 
       const formatted = items.map((item: any) => ({
@@ -108,10 +107,7 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
       console.error("Data error:", error);
     }
   };
-
-  // ✅ VIEW CLICK
-
-  // ✅ FILTER
+  //FILTER
   const filteredData = data.filter((item) => {
     const text = searchText.toLowerCase();
     const status = statusFilter.toLowerCase();
@@ -137,7 +133,7 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
     );
   });
 
-  // ✅ LOAD DATA
+  // LOAD DATA
   React.useEffect(() => {
     if (!context) return;
     debugger;
@@ -145,7 +141,7 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
     void getCapexData();
   }, [context]);
 
-  // ✅ OPEN VIEW PAGE
+  // OPEN VIEW PAGE
   if (showForm) {
     if (formType === "approve") {
       return (
