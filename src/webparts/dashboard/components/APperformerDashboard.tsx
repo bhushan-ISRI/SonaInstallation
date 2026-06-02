@@ -39,7 +39,6 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
   const [currentUserName, setCurrentUserName] = React.useState("");
   const [selectedItem, setSelectedItem] = React.useState<any>(null);
 
-  // ✅ GET CURRENT USER
   const getLoggedInUser = async () => {
     try {
       const user = await sp.web.currentUser();
@@ -56,12 +55,11 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
 
       setSelectedItem(fullItem);
 
-      // ✅ Use fullItem (not item)
       const status = fullItem.Status?.toLowerCase().trim();
 
-      if (status === "pending for pf approver") {
+      if (status === "Pending for Vouching Update") {
         setFormType("approve");
-      } else if (status === "pending for pf approver utr") {
+      } else if (status === "Pending for UTR Update") {
         setFormType("approveUTR");
       }
 
@@ -86,10 +84,9 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           "TotalamounttobeCapitalized",
           "Status",
         )
-        // .expand("VendorCode") // ✅ ADD THIS LINE
         .filter(
-          `Status eq 'Pending for PF Approver' 
-   or Status eq 'Pending for PF Approver UTR'
+          `Status eq 'Pending for Vouching Update' 
+   or Status eq 'Pending for UTR Update'
    or Status eq 'Paid'`,
         )
         .orderBy("ID", false)();
@@ -113,10 +110,7 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
       console.error("Data error:", error);
     }
   };
-
-  // ✅ GET LIST DATA
-
-  // ✅ VIEW CLICK
+  //  VIEW CLICK
   const handleViewClick = async (item: any) => {
     try {
       const fullItem = await sp.web.lists
