@@ -32,7 +32,7 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
   const [formType, setFormType] = useState<"new" | "view" | "approve" | null>(
     null,
   );
-
+  const [currentUserId, setCurrentUserId] = React.useState<number>(0);
   const [activeMenu, setActiveMenu] = React.useState("My Request");
   const [searchText, setSearchText] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -41,16 +41,16 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
   const [currentUserName, setCurrentUserName] = React.useState("");
   const [selectedItem, setSelectedItem] = React.useState<any>(null);
 
-  // GET CURRENT USER
   const getLoggedInUser = async () => {
     try {
       const user = await sp.web.currentUser();
+
       setCurrentUserName(user.Title);
+      setCurrentUserId(user.Id);
     } catch (error) {
       console.error("User error:", error);
     }
   };
-
   const handleApproveClick = async (item: any) => {
     try {
       const fullItem = await sp.web.lists
@@ -84,8 +84,14 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           "PONumber",
           "TotalamounttobeCapitalized",
           "Status",
+          "CurrentApproverId",
+          "CurrentApprover/Title",
+          "CurrentApprover/EMail",
         )
-        .filter(`Status eq 'Pending for Approval'`)
+        .expand("CurrentApprover")
+        .filter(
+          `Status eq 'Pending for Approval' and CurrentApproverId eq ${currentUserId}`,
+        )
         .orderBy("ID", false)();
 
       const formatted = items.map((item: any) => ({
@@ -100,6 +106,7 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
         PONumber: item.PONumber || "",
         TotalamounttobeCapitalized: item.TotalamounttobeCapitalized || "",
         status: item.Status || "",
+        CurrentApprover: item.CurrentApprover?.Title || "",
       }));
 
       setData(formatted);
@@ -136,10 +143,15 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
   // LOAD DATA
   React.useEffect(() => {
     if (!context) return;
-    debugger;
+
     void getLoggedInUser();
-    void getCapexData();
   }, [context]);
+
+  React.useEffect(() => {
+    if (currentUserId > 0) {
+      void getCapexData();
+    }
+  }, [currentUserId]);
 
   // OPEN VIEW PAGE
   if (showForm) {
@@ -301,7 +313,9 @@ const ApproverDashboard: React.FC<UserDashboardProps> = ({ context }) => {
                           <td className="px-4 py-2">
                             ₹ {item.TotalamounttobeCapitalized}
                           </td>
-                          <td className="px-4 py-2">Approver</td>
+                          <td className="px-4 py-2">
+                            {item.CurrentApprover || "-"}
+                          </td>
                           <td className="px-4 py-2">{item.status}</td>
                         </tr>
                       ))

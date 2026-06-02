@@ -151,8 +151,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
 
     if (activeMenu === "Paid") {
       menuFilter = item.status?.toLowerCase() === "paid";
-    } else if (activeMenu === "Rejected") {
-      menuFilter = item.status?.toLowerCase() === "rejected";
+    } else if (activeMenu === "Reject") {
+      menuFilter = item.status?.toLowerCase() === "reject";
     } else if (activeMenu === "My Request") {
       menuFilter = true;
     }
@@ -266,9 +266,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
             <li className="nav-item">
               <a
                 className={
-                  activeMenu === "Rejected" ? "nav-link  active" : "nav-link"
+                  activeMenu === "Reject" ? "nav-link  active" : "nav-link"
                 }
-                onClick={() => setActiveMenu("Rejected")}
+                onClick={() => setActiveMenu("Reject")}
                 style={{ cursor: "pointer" }}
               >
                 Rejected
@@ -309,7 +309,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ context }) => {
                   <option value="Pending for Approval">
                     Pending for Approval
                   </option>
-                  <option value="Rejected">Rejected</option>
+                  <option value="Reject">Reject</option>
                   <option value="Paid">Paid</option>
                   <option value="Save as Draft">Save as Draft</option>
                   <option value="Send Back">Send Back</option>

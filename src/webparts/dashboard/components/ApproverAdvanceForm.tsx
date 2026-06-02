@@ -3,6 +3,9 @@ import "./advanced.scss";
 import { spfi } from "@pnp/sp";
 import { SPFx } from "@pnp/sp/presets/all";
 import { useEffect, useState } from "react";
+import Swal from "sweetalert2";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+require("sweetalert2/dist/sweetalert2.min.css");
 import { IPeoplePickerContext } from "@pnp/spfx-controls-react/lib/PeoplePicker";
 import {
   PeoplePicker,
@@ -36,9 +39,10 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
   const [attachments, setAttachments] = useState<any[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [vendors, setVendors] = useState<IVendor[]>([]);
+  const [selectedVendorCode, setSelectedVendorCode] = useState("");
   const [gstAdjustment, setGstAdjustment] = useState<number>(0);
   const [otherAdjustment, setOtherAdjustment] = useState<number>(0);
-
+  
   const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
   const [approvalMatrix, setApprovalMatrix] = useState<any[]>([]);
   const [workflowHistory, setWorkflowHistory] = useState<any[]>([]);
@@ -77,38 +81,43 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
       setAttachments([]);
     }
   };
-  const getPreviousAdvances = async (vendorId: number) => {
-    try {
-      debugger;
-      console.log("Fetching for Vendor:", vendorId);
+const getPreviousAdvances = async (vendorId: number) => {
+  try {
+    const vendor = vendors.find((v) => v.Id === vendorId);
 
-      const data = await sp.web.lists
-        .getByTitle("Installation")
-        .items.select(
-          "PONumber",
-          "TotalPaymentofProject",
-          "Created",
-          "VoucherDate",
-          "PaidAmount",
-          "Status",
-          "VendorCode",
-        )
-        .filter(`Status eq 'Paid'`)
-        .orderBy("Created", false)();
-      console.log("DATA:", data);
+    if (!vendor) return;
 
-      void setPreviousAdvances(data);
-    } catch (error) {
-      console.error("Error fetching previous advances:", error);
-      void setPreviousAdvances([]);
-    }
-  };
+    const data = await sp.web.lists
+      .getByTitle("Installation")
+      .items.select(
+        "PONumber",
+        "TotalPaymentofProject",
+        "Created",
+        "VoucherDate",
+        "PaidAmount",
+        "Status",
+        "VendorCode",
+        "VoucherNumber"
+      )
+      .filter(
+        `Status eq 'Paid' and VendorCode eq '${vendor.VendorCode}'`
+      )
+      .orderBy("Created", false)();
+
+    console.log("DATA:", data);
+
+    setPreviousAdvances(data);
+  } catch (error) {
+    console.error("Error fetching previous advances:", error);
+    setPreviousAdvances([]);
+  }
+};
 
   const uploadAttachments = async (capexId: string) => {
     try {
       if (attachments.length === 0) return;
 
-      const safeCapexId = capexId.replace(/\//g, "_"); // ✅ move here
+      const safeCapexId = capexId.replace(/\//g, "_"); 
 
       const folderPath = `CapexAdvanceDocs/${safeCapexId}`;
 
@@ -136,16 +145,14 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
   };
 
   const getItemById = async () => {
-    try {
+    try { 
       const item = await sp.web.lists
         .getByTitle("Installation")
         .items.getById(itemId)();
-      // .select("*", "VendorCode/Id", "VendorCode/VendorCode")
-      //  .expand( "VendorCode")();
-      //  ADD
 
       setItemData(item);
-      setApproverRemarks(item.ApproverRemarks || "");
+
+      setApproverRemarks(""); 
 
       const matchedVendor = vendors.find(
         (v) => v.VendorCode === item.VendorCode,
@@ -197,13 +204,53 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
       console.error("Fetch error:", error);
     }
   };
+  useEffect(() => {
+    if (!itemData) return;
+
+    console.log("Installation VendorCode:", itemData.VendorCode);
+    console.log("Vendor Master:", vendors);
+
+const vendor = vendors.find(
+  (v) =>
+    String(v.VendorCode || "")
+      .trim()
+      .toLowerCase() ===
+    String(itemData.VendorCode || "")
+      .trim()
+      .toLowerCase(),
+);
+
+    console.log("Matched Vendor:", vendor);
+
+if (vendor) {
+  setSelectedVendorId(vendor.Id);
+  setSelectedVendorName(vendor.VendorName);
+  setSelectedVendorCode(vendor.VendorCode);
+
+  void getPreviousAdvances(vendor.Id);
+} else {
+  setSelectedVendorId(null);
+  setSelectedVendorName(itemData.VendorName || "");
+  setSelectedVendorCode(itemData.VendorCode || "");
+}
+  }, [itemData, vendors]);
 
   useEffect(() => {
     if (!context || !itemId) return;
 
     const loadData = async () => {
-      await getItemById();
-      await getVendors();
+      try {
+        await getVendors();
+        await getItemById();
+      } catch (err) {
+        console.error("Load Error:", err);
+
+        await Swal.fire({
+          title: "Error",
+          text: "Failed to load data",
+          icon: "error",
+        });
+      }
     };
 
     void loadData();
@@ -213,7 +260,12 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
   const handleApprove = async () => {
     try {
       if (!approverRemarks?.trim()) {
-        alert("Please enter Remarks");
+        await Swal.fire({
+          title: "Validation",
+          text: "Please enter Remarks",
+          icon: "warning",
+        });
+        return;
         return;
       }
 
@@ -223,11 +275,12 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
 
       // Safety check
       if (Number(itemData.CurrentApproverId) !== currentUserId) {
-        alert(
-          `You are not current approver.
-Current Approver: ${itemData.CurrentApproverId}
-Logged In User: ${currentUserId}`,
-        );
+        await Swal.fire({
+          title: "Access Denied",
+          text: "You are not the current approver.",
+          icon: "warning",
+        });
+        return;
         return;
       }
 
@@ -240,7 +293,11 @@ Logged In User: ${currentUserId}`,
       );
 
       if (currentIndex === -1) {
-        alert("User not found in approval matrix");
+        await Swal.fire({
+          title: "Error",
+          text: "User not found in approval matrix",
+          icon: "error",
+        });
         return;
       }
 
@@ -277,12 +334,7 @@ Logged In User: ${currentUserId}`,
         nextApproverId = Number(flow[currentIndex + 1].Id);
 
         finalStatus = "Pending for Approval";
-      }
-
-      // ==================================================
-      // CASE 3 : No next approver
-      // ==================================================
-      else {
+      } else {
         nextApproverId = null;
         finalStatus = "Approved";
       }
@@ -318,20 +370,31 @@ Logged In User: ${currentUserId}`,
           CurrentApproverId: nextApproverId,
         });
 
-      alert("Approved Successfully");
-
+      await Swal.fire({
+        title: "Success",
+        text: "Approved Successfully",
+        icon: "success",
+      });
       onClose();
     } catch (error) {
       console.error("Approval Error:", error);
-      alert("Something went wrong while approving.");
+      await Swal.fire({
+        title: "Error",
+        text: "Something went wrong while approving.",
+        icon: "error",
+      });
     }
   };
 
-  // ✅ Sent Back
+  // Sent Back
   const handleSendBack = async () => {
     try {
       if (!approverRemarks) {
-        alert("Please enter Remarks");
+        await Swal.fire({
+          title: "Validation",
+          text: "Please enter Remarks",
+          icon: "warning",
+        });
         return;
       }
 
@@ -377,8 +440,11 @@ Logged In User: ${currentUserId}`,
           CurrentApproverId: previousApproverId,
         });
 
-      alert("Send Back ✅");
-
+      await Swal.fire({
+        title: "Success",
+        text: "Request sent back successfully",
+        icon: "success",
+      });
       onClose();
     } catch (error) {
       console.error(error);
@@ -444,8 +510,13 @@ Logged In User: ${currentUserId}`,
   //  Reject
   const handleReject = async () => {
     try {
-      if (!approverRemarks) {
-        alert("Please enter Remarks");
+      if (!approverRemarks?.trim()) {
+        await Swal.fire({
+          title: "Validation",
+          text: "Please enter Remarks",
+          icon: "warning",
+        });
+
         return;
       }
 
@@ -458,7 +529,7 @@ Logged In User: ${currentUserId}`,
       const currentIndex = flow.findIndex((a: any) => a.Id === currentUserId);
 
       if (currentIndex !== -1) {
-        flow[currentIndex].Status = "Rejected";
+        flow[currentIndex].Status = "Reject";
       }
 
       const history = itemData.WorkFlowHistory
@@ -467,7 +538,7 @@ Logged In User: ${currentUserId}`,
 
       history.push({
         CurrentApprover: context.pageContext.user.displayName,
-        ActionTaken: "Rejected",
+        ActionTaken: "Reject",
         Comment: approverRemarks,
         Date: new Date().toISOString(),
       });
@@ -477,15 +548,18 @@ Logged In User: ${currentUserId}`,
         .items.getById(itemId)
         .update({
           ApproverRemarks: approverRemarks,
-          Status: "Rejected",
+          Status: "Reject",
 
           ApprovalMatrix: JSON.stringify(flow),
           WorkFlowHistory: JSON.stringify(history),
           CurrentApproverId: null,
         });
 
-      alert("Rejected ❌");
-
+      await Swal.fire({
+        title: "Success",
+        text: "Request rejected successfully",
+        icon: "success",
+      });
       onClose();
     } catch (error) {
       console.error(error);
@@ -620,24 +694,12 @@ Logged In User: ${currentUserId}`,
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">Vendor Code</label>
-                    <select
-                      value={selectedVendorId ?? ""}
-                      disabled={true}
-                      className="formtext-control readonly"
-                      onChange={(e) => {
-                        const id = Number(e.target.value);
-                        const vendor = vendors.find((v) => v.Id === id);
-                        setSelectedVendorId(id);
-                        setSelectedVendorName(vendor?.VendorName || "");
-                      }}
-                    >
-                      <option value="">Select Vendor</option>
-                      {vendors.map((v) => (
-                        <option key={v.Id} value={v.Id}>
-                          {v.VendorCode}
-                        </option>
-                      ))}
-                    </select>
+                    <input
+                      type="text"
+                      value={itemData?.VendorCode || selectedVendorCode || ""}
+                      className="form-control readonly"
+                      readOnly
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">Vendor Name</label>
@@ -661,12 +723,13 @@ Logged In User: ${currentUserId}`,
                       type="date"
                       value={
                         itemData.POdate
-                          ? new Date(itemData.POdate).toLocaleDateString(
-                              "en-GB",
-                            )
+                          ? new Date(itemData.POdate)
+                              .toISOString()
+                              .split("T")[0]
                           : ""
                       }
                       className="form-control readonly"
+                      readOnly
                     />
                   </div>
                   <div className="col-md-4">

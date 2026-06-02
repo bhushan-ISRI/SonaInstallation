@@ -30,7 +30,7 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
   const [formType, setFormType] = useState<
     "approve" | "approveUTR" | "view" | null
   >(null);
-
+  const [currentUserEmail, setCurrentUserEmail] = React.useState("");
   const [activeMenu, setActiveMenu] = React.useState("My Request");
   const [searchText, setSearchText] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -40,12 +40,12 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
   const [selectedItem, setSelectedItem] = React.useState<any>(null);
 
   const getLoggedInUser = async () => {
-    try {
-      const user = await sp.web.currentUser();
-      setCurrentUserName(user.Title);
-    } catch (error) {
-      console.error("User error:", error);
-    }
+    const user = await sp.web.currentUser();
+
+    setCurrentUserName(user.Title);
+    setCurrentUserEmail(user.Email.toLowerCase());
+
+    return user.Email.toLowerCase();
   };
   const handleApproveClick = async (item: any) => {
     try {
@@ -57,9 +57,9 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
 
       const status = fullItem.Status?.toLowerCase().trim();
 
-      if (status === "Pending for Vouching Update") {
+      if (status === "pending for vouching update") {
         setFormType("approve");
-      } else if (status === "Pending for UTR Update") {
+      } else if (status === "pending for utr update") {
         setFormType("approveUTR");
       }
 
@@ -68,7 +68,7 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
       console.error("Approve error:", error);
     }
   };
-  const getCapexData = async () => {
+  const getCapexData = async (userEmail?: string) => {
     try {
       debugger;
       const items = await sp.web.lists
@@ -83,7 +83,11 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           "PONumber",
           "TotalamounttobeCapitalized",
           "Status",
+          "CurrentApproverId",
+          "CurrentApprover/Title",
+          "CurrentApprover/EMail",
         )
+        .expand("CurrentApprover")
         .filter(
           `Status eq 'Pending for Vouching Update' 
    or Status eq 'Pending for UTR Update'
@@ -103,9 +107,16 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
         PONumber: item.PONumber || "",
         TotalamounttobeCapitalized: item.TotalamounttobeCapitalized || "",
         status: item.Status || "",
+
+        CurrentApprover: item.CurrentApprover?.Title || "",
+        CurrentApproverEmail: item.CurrentApprover?.EMail?.toLowerCase() || "",
       }));
 
-      setData(formatted);
+      const myItems = formatted.filter(
+        (x: any) => x.CurrentApproverEmail === userEmail,
+      );
+
+      setData(myItems);
     } catch (error) {
       console.error("Data error:", error);
     }
@@ -150,12 +161,15 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
     );
   });
 
-  // ✅ LOAD DATA
   React.useEffect(() => {
-    debugger;
-    if (!context) return;
-    void getLoggedInUser();
-    void getCapexData();
+    const loadData = async () => {
+      if (!context) return;
+
+      const email = await getLoggedInUser();
+      await getCapexData(email);
+    };
+
+    void loadData();
   }, [context]);
 
   if (showForm && selectedItem) {
@@ -315,14 +329,13 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
                       filteredData.map((item, i) => (
                         <tr key={i}>
                           <td className="px-4 py-2">
-                            {(item.status === "Pending for PF Approver" ||
-                              item.status ===
-                                "Pending for PF Approver UTR") && (
+                            {(item.status === "Pending for Vouching Update" ||
+                              item.status === "Pending for UTR Update") && (
                               <span
                                 style={{ cursor: "pointer" }}
                                 onClick={() => handleApproveClick(item)}
                               >
-                                <img src={Edit} width={15} alt="View" />
+                                <img src={Edit} width={15} alt="Edit" />
                               </span>
                             )}
                           </td>
@@ -339,8 +352,9 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
                           <td className="px-4 py-2">
                             ₹ {item.TotalamounttobeCapitalized}
                           </td>
-                          <td className="px-4 py-2">Approver</td>
-
+                          <td className="px-4 py-2">
+                            {item.CurrentApprover || "-"}
+                          </td>
                           <td className="px-4 py-2">{item.status}</td>
                         </tr>
                       ))
