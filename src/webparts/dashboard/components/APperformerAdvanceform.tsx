@@ -53,6 +53,72 @@ const APperformerAdvanceform: React.FC<IProps> = ({
     Number(itemData?.TotalPaymentofProject || 0) +
     Number(gstAdjustment || 0) +
     Number(otherAdjustment || 0);
+
+  const norm = (s: string) => (s || "").toLowerCase().trim();
+
+  const isPaid = norm(itemData?.Status) === "paid";
+  const isPendingUTR = norm(itemData?.Status) === "pending for utr update";
+  const isSentBack = norm(itemData?.Status) === "send back";
+  const isSaveAsDraft = norm(itemData?.Status) === "save as draft";
+  const isWithRequester = isSentBack || isSaveAsDraft;
+
+  const currentApproverId = Number(itemData?.CurrentApproverId);
+
+  const currentApproverMatrixIndex = approvalMatrix.findIndex(
+    (a: any) => Number(a.Id) === currentApproverId
+  );
+
+  const initiatorClass: string = (() => {
+    if (isPaid) return "approved";
+    if (isWithRequester) return "current";
+    if (currentApproverMatrixIndex >= 0) return "approved";
+    return "pending";
+  })();
+
+  const getApproverRibbonClass = (approver: any, index: number): string => {
+    if (isPaid) return "approved";
+    if (isWithRequester) return "pending";
+
+    const approverHistory = workflowHistory.find(
+      (x: any) =>
+        norm(x.ActionBy || x.CurrentApprover || "") === norm(approver.Name)
+    );
+
+    if (
+      norm(approverHistory?.ActionTaken) === "reject" ||
+      norm(approverHistory?.ActionTaken) === "rejected" ||
+      norm(approverHistory?.Action) === "reject" ||
+      norm(approverHistory?.Action) === "rejected"
+    ) {
+      return "rejected";
+    }
+
+    if (
+      norm(approverHistory?.ActionTaken) === "approved" ||
+      norm(approverHistory?.Action) === "approved"
+    ) {
+      return "approved";
+    }
+
+    if (isPendingUTR) {
+      const performerIndex = approvalMatrix.findIndex(
+        (x: any) => x.Role && x.Role.toLowerCase().trim() === "performer"
+      );
+      if (index === performerIndex) return "current";
+      if (index < performerIndex) return "approved";
+    }
+
+    if (Number(approver.Id) === currentApproverId) {
+      return "current";
+    }
+
+    if (index < currentApproverMatrixIndex) {
+      return "approved";
+    }
+
+    return "pending";
+  };
+
   const getPreviousAdvances = async (vendorId: number) => {
     try {
       debugger;
@@ -120,7 +186,7 @@ const APperformerAdvanceform: React.FC<IProps> = ({
       setSelectedVendorId(matchedVendor?.Id || null);
       setSelectedVendorName(item.VendorName || "");
 
-      setSelectedVendorName(item.VendorName); 
+      setSelectedVendorName(item.VendorName);
       setGstAdjustment(Number(item.GSTAdjustmentifAny || 0));
       setOtherAdjustment(Number(item.OtherAdjustmentifany || 0));
 
@@ -185,12 +251,12 @@ const APperformerAdvanceform: React.FC<IProps> = ({
     if (vendor) {
       setSelectedVendorId(vendor.Id);
       setSelectedVendorName(vendor.VendorName);
-      setSelectedVendorCode(vendor.VendorCode); 
+      setSelectedVendorCode(vendor.VendorCode);
       void getPreviousAdvances(vendor.Id);
     } else {
       setSelectedVendorId(null);
       setSelectedVendorName(itemData.VendorName || "");
-      setSelectedVendorCode(itemData.VendorCode || ""); 
+      setSelectedVendorCode(itemData.VendorCode || "");
     }
   }, [itemData, vendors]);
 
@@ -254,7 +320,6 @@ const APperformerAdvanceform: React.FC<IProps> = ({
     }
   };
 
-  //Sent Back
   const handleSendBack = async () => {
     try {
       if (!voucherDate || !voucherNumber || !approverRemarks?.trim()) {
@@ -397,27 +462,19 @@ const APperformerAdvanceform: React.FC<IProps> = ({
       <div className="row">
         <div className="col-md-12">
           <div className="Main-Boxpoup">
-            {/* 🔹 Header */}
             <div className="bordered">
               <img src={logo} />
               <h1> Installation Commisioning Request(AP Performer) </h1>
             </div>
             <div className="approval-ribbon">
-              <div className="ribbon-step completed">
+              <div className={`ribbon-step ${initiatorClass}`}>
                 {itemData.EmployeeName}
               </div>
 
               {approvalMatrix.map((approver: any, index: number) => (
                 <div
                   key={index}
-                  className={`ribbon-step
-      ${
-        approver.Status === "Approved"
-          ? "completed"
-          : approver.Status === "In Progress"
-            ? "current"
-            : ""
-      }`}
+                  className={`ribbon-step ${getApproverRibbonClass(approver, index)}`}
                 >
                   {approver.Name}
                   <br />

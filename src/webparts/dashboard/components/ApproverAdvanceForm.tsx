@@ -60,55 +60,65 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
 
   const norm = (s: string) => (s || "").toLowerCase().trim();
 
-  const status = norm(itemData?.Status);
-
-  const isPaid = status === "paid";
-  const isSaveAsDraft = status === "save as draft";
-  const isSentBack =
-    status === "send back" ||
-    workflowHistory.some(
-      (x: any) =>
-        norm(x.ActionTaken) === "send back" || norm(x.Action) === "send back"
-    );
-  const isPendingVouching = status === "pending for vouching update";
-  const isPendingUTR = status === "pending for utr update";
-
-  const rejectedEntry = workflowHistory.find(
-    (w: any) => norm(w.ActionTaken) === "reject" || norm(w.Action) === "reject"
-  );
-  const rejectedByName = norm(
-    rejectedEntry?.CurrentApprover || rejectedEntry?.ActionBy || ""
-  );
-  const isRejected = rejectedByName !== "";
+  const isPaid = norm(itemData?.Status) === "paid";
+  const isSentBack = norm(itemData?.Status) === "send back";
+  const isSaveAsDraft = norm(itemData?.Status) === "save as draft";
+  const isPendingVouching = norm(itemData?.Status) === "pending for vouching update";
+  const isPendingUTR = norm(itemData?.Status) === "pending for utr update";
+  const isWithRequester = isSentBack || isSaveAsDraft;
 
   const currentApproverId = Number(itemData?.CurrentApproverId);
 
-  const currentApproverIndex = approvalMatrix.findIndex(
+  const currentApproverMatrixIndex = approvalMatrix.findIndex(
     (a: any) => Number(a.Id) === currentApproverId
   );
 
-  const initiatorRibbonClass: string = (() => {
+  const initiatorClass: string = (() => {
     if (isPaid) return "approved";
-    if (isSaveAsDraft || isSentBack) return "current";
     if (isPendingVouching || isPendingUTR) return "approved";
-    if (isRejected && currentApproverIndex === -1) return "current";
-    if (currentApproverIndex >= 0) return "approved";
-    return "current";
+    if (isWithRequester) return "current";
+    if (currentApproverMatrixIndex >= 0) return "approved";
+    return "pending";
   })();
 
   const getApproverRibbonClass = (approver: any, index: number): string => {
     if (isPaid) return "approved";
-    if (isSaveAsDraft || isSentBack) return "pending";
     if (isPendingVouching || isPendingUTR) return "approved";
-    if (norm(approver.Name) === rejectedByName) return "rejected";
-    if (isRejected && index > currentApproverIndex) return "pending";
-    if (Number(approver.Id) === currentApproverId) return "current";
-    if (index < currentApproverIndex) return "approved";
+    if (isWithRequester) return "pending";
+
+    const approverHistory = workflowHistory.find(
+      (x: any) =>
+        norm(x.ActionBy || x.CurrentApprover || "") === norm(approver.Name)
+    );
+
+    if (
+      norm(approverHistory?.ActionTaken) === "reject" ||
+      norm(approverHistory?.ActionTaken) === "rejected" ||
+      norm(approverHistory?.Action) === "reject" ||
+      norm(approverHistory?.Action) === "rejected"
+    ) {
+      return "rejected";
+    }
+
+    if (
+      norm(approverHistory?.ActionTaken) === "approved" ||
+      norm(approverHistory?.Action) === "approved"
+    ) {
+      return "approved";
+    }
+
+    if (Number(approver.Id) === currentApproverId) {
+      return "current";
+    }
+
+    if (index < currentApproverMatrixIndex) {
+      return "approved";
+    }
+
     return "pending";
   };
 
   const getAttachments = async (capexId: string) => {
-    debugger;
     try {
       if (!capexId) return;
       const safeCapexId = capexId.replace(/\//g, "_");
@@ -181,23 +191,33 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
       const item = await sp.web.lists
         .getByTitle("Installation")
         .items.getById(itemId)();
+
+      console.log("CurrentApproverId from SP:", item.CurrentApproverId);
+      console.log("ApprovalMatrix from SP:", item.ApprovalMatrix);
+      console.log("Status from SP:", item.Status);
+
       setItemData(item);
       setApproverRemarks("");
+
       const matchedVendor = vendors.find((v) => v.VendorCode === item.VendorCode);
       setSelectedVendorId(matchedVendor?.Id || null);
       setSelectedVendorName(item.VendorName || "");
       setGstAdjustment(Number(item.GSTAdjustmentifAny || 0));
       setOtherAdjustment(Number(item.OtherAdjustmentifany || 0));
+
       if (item.PaymentId) {
         await getAttachments(item.PaymentId);
       }
+
       if (item.ApprovalMatrix) {
         try {
           const parsed =
             typeof item.ApprovalMatrix === "string"
               ? JSON.parse(item.ApprovalMatrix)
               : item.ApprovalMatrix;
-          setApprovalMatrix(Array.isArray(parsed) ? parsed : []);
+          const matrix = Array.isArray(parsed) ? parsed : [];
+          console.log("Parsed ApprovalMatrix:", matrix);
+          setApprovalMatrix(matrix);
         } catch (e) {
           console.error("ApprovalMatrix parse error", e);
           setApprovalMatrix([]);
@@ -205,13 +225,16 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
       } else {
         setApprovalMatrix([]);
       }
+
       if (item.WorkFlowHistory) {
         try {
           const parsed =
             typeof item.WorkFlowHistory === "string"
               ? JSON.parse(item.WorkFlowHistory)
               : item.WorkFlowHistory;
-          setWorkflowHistory(Array.isArray(parsed) ? parsed : []);
+          const history = Array.isArray(parsed) ? parsed : [];
+          console.log("Parsed WorkFlowHistory:", history);
+          setWorkflowHistory(history);
         } catch (e) {
           console.error("WorkFlowHistory parse error", e);
           setWorkflowHistory([]);
@@ -433,7 +456,7 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
             </div>
 
             <div className="approval-ribbon">
-              <div className={`ribbon-step ${initiatorRibbonClass}`}>
+              <div className={`ribbon-step ${initiatorClass}`}>
                 {itemData.EmployeeName}
               </div>
               {approvalMatrix.map((approver: any, index: number) => (
