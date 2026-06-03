@@ -518,7 +518,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
       const history = [
         {
           CurrentApprover: employee.EmployeeName,
-          ActionTaken: "Draft",
+          ActionTaken: "Saved as draft",
           Comment: "Saved as draft",
           Date: new Date().toISOString(),
         },

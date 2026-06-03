@@ -55,7 +55,10 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
 
   const rejectedEntry = workflowHistory.find(
     (w: any) =>
-      norm(w.Action) === "rejected" || norm(w.ActionTaken) === "rejected",
+      norm(w.Action) === "reject" ||
+      norm(w.ActionTaken) === "reject" ||
+      norm(w.Action) === "rejected" ||
+      norm(w.ActionTaken) === "rejected",
   );
   const rejectedByName = norm(
     rejectedEntry?.ActionBy || rejectedEntry?.CurrentApprover || "",
@@ -82,13 +85,17 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
     if (isPaid) return "approved";
     if (isSaveAsDraft || isSentBack) return "pending";
 
+    // Rejected approver should always be red
     if (norm(approver.Name) === rejectedByName) return "rejected";
+
+    // All approvers after rejection remain pending
     if (isRejected && index >= approvedCount) return "pending";
 
     if (isPendingUTR) {
       const performerIndex = approverDetails.findIndex(
         (x: any) => x.Role && x.Role.toLowerCase().trim() === "performer",
       );
+
       if (performerIndex !== -1) {
         if (index === performerIndex) return "current";
         if (index < performerIndex) return "approved";
@@ -100,6 +107,7 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
 
     if (index < approvedCount) return "approved";
     if (index === approvedCount) return "current";
+
     return "pending";
   };
 
@@ -497,7 +505,7 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                             ))}
                           </tbody>
                         </table>
-                      </div> 
+                      </div>
                     )}
                   </div>
                 </div>
