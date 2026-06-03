@@ -65,7 +65,7 @@ const APperformerAdvanceform: React.FC<IProps> = ({
   const currentApproverId = Number(itemData?.CurrentApproverId);
 
   const currentApproverMatrixIndex = approvalMatrix.findIndex(
-    (a: any) => Number(a.Id) === currentApproverId
+    (a: any) => Number(a.Id) === currentApproverId,
   );
 
   const initiatorClass: string = (() => {
@@ -81,7 +81,7 @@ const APperformerAdvanceform: React.FC<IProps> = ({
 
     const approverHistory = workflowHistory.find(
       (x: any) =>
-        norm(x.ActionBy || x.CurrentApprover || "") === norm(approver.Name)
+        norm(x.ActionBy || x.CurrentApprover || "") === norm(approver.Name),
     );
 
     if (
@@ -102,7 +102,7 @@ const APperformerAdvanceform: React.FC<IProps> = ({
 
     if (isPendingUTR) {
       const performerIndex = approvalMatrix.findIndex(
-        (x: any) => x.Role && x.Role.toLowerCase().trim() === "performer"
+        (x: any) => x.Role && x.Role.toLowerCase().trim() === "performer",
       );
       if (index === performerIndex) return "current";
       if (index < performerIndex) return "approved";
@@ -882,27 +882,38 @@ const APperformerAdvanceform: React.FC<IProps> = ({
                       <p>No history available</p>
                     ) : (
                       <div className="workflow-history">
-                        {workflowHistory.map((h, index) => (
-                          <div key={index} className="history-item">
-                            <div>
-                              {h.ActionTaken === "Submitted" && "📩 "}
-                              {h.ActionTaken === "Approved" && "✅ "}
-                              {h.ActionTaken === "Rejected" && "❌ "}
-                              {h.ActionTaken === "Send Back" && "↩ "}
-                              {h.ActionTaken === "Vouched" && "💰 "}
-                              {h.ActionTaken === "Paid" && "💸 "}
-                              {h.ActionTaken}
-                            </div>
-
-                            <div>
-                              <b>{h.CurrentApprover}</b>
-                            </div>
-                            <div>{h.Comment}</div>
-                            <div>
-                              {h.Date ? new Date(h.Date).toLocaleString() : ""}
-                            </div>
+                        {workflowHistory.length === 0 ? (
+                          <p>No history available</p>
+                        ) : (
+                          <div className="workflow-history">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Action By</th>
+                                  <th>Action Taken</th>
+                                  <th>Date</th>
+                                  <th>Comment</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {workflowHistory.map(
+                                  (h: any, index: number) => (
+                                    <tr key={index}>
+                                      <td>{h.CurrentApprover}</td>
+                                      <td>{h.ActionTaken}</td>
+                                      <td>
+                                        {h.Date
+                                          ? new Date(h.Date).toLocaleString()
+                                          : ""}
+                                      </td>
+                                      <td>{h.Comment}</td>
+                                    </tr>
+                                  ),
+                                )}
+                              </tbody>
+                            </table>
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
                   </div>

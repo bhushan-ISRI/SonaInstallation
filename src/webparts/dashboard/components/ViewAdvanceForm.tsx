@@ -24,7 +24,8 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
   const [TotalPaymentofProject, setTotalPaymentofProject] = useState("");
   const [GSTAdjustmentifAny, setGSTAdjustmentifAny] = useState("");
   const [OtherAdjustmentifany, setOtherAdjustmentifany] = useState("");
-  const [TotalamounttobeCapitalized, setTotalamounttobeCapitalized] = useState("");
+  const [TotalamounttobeCapitalized, setTotalamounttobeCapitalized] =
+    useState("");
   const [POdate, setPOdate] = useState("");
   const [POPaymentTerms, setPOPaymentTerms] = useState("");
   const [POAmount, setPOAmount] = useState("");
@@ -47,23 +48,23 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
     status === "send back" ||
     workflowHistory.some(
       (x: any) =>
-        norm(x.Action) === "sent back" || norm(x.ActionTaken) === "sent back"
+        norm(x.Action) === "sent back" || norm(x.ActionTaken) === "sent back",
     );
   const isPendingVouching = status === "pending for vouching update";
   const isPendingUTR = status === "pending for utr update";
 
   const rejectedEntry = workflowHistory.find(
     (w: any) =>
-      norm(w.Action) === "rejected" || norm(w.ActionTaken) === "rejected"
+      norm(w.Action) === "rejected" || norm(w.ActionTaken) === "rejected",
   );
   const rejectedByName = norm(
-    rejectedEntry?.ActionBy || rejectedEntry?.CurrentApprover || ""
+    rejectedEntry?.ActionBy || rejectedEntry?.CurrentApprover || "",
   );
   const isRejected = rejectedByName !== "";
 
   const approvedCount = workflowHistory.filter(
     (x: any) =>
-      norm(x.Action) === "approved" || norm(x.ActionTaken) === "approved"
+      norm(x.Action) === "approved" || norm(x.ActionTaken) === "approved",
   ).length;
 
   const initiatorRibbonClass: string = (() => {
@@ -72,7 +73,8 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
     if (isPendingVouching || isPendingUTR) return "approved";
     if (isRejected && approvedCount === 0) return "current";
     if (approvedCount > 0) return "approved";
-    if (status === "pending for approval" && approverDetails.length > 0) return "approved";
+    if (status === "pending for approval" && approverDetails.length > 0)
+      return "approved";
     return "current";
   })();
 
@@ -85,7 +87,7 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
 
     if (isPendingUTR) {
       const performerIndex = approverDetails.findIndex(
-        (x: any) => x.Role && x.Role.toLowerCase().trim() === "performer"
+        (x: any) => x.Role && x.Role.toLowerCase().trim() === "performer",
       );
       if (performerIndex !== -1) {
         if (index === performerIndex) return "current";
@@ -106,7 +108,9 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
       if (!PaymentId) return;
       const safePaymentId = PaymentId.replace(/\//g, "_");
       const folderPath = `/sites/SonaFinance/InstallationCommision/${safePaymentId}`;
-      const files = await sp.web.getFolderByServerRelativePath(folderPath).files();
+      const files = await sp.web
+        .getFolderByServerRelativePath(folderPath)
+        .files();
       setAttachments(files || []);
     } catch (error) {
       console.log("Attachment fetch error:", error);
@@ -137,7 +141,7 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
           "HOD/Title",
           "ContactNo",
           "EmployeeStatus",
-          "CostCenter"
+          "CostCenter",
         )
         .expand("ReportingManager", "HOD")
         .filter(`EmployeeEmail eq '${email}'`)
@@ -171,7 +175,7 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
     setUTRNumber(formData.UTRNumber || "");
 
     const vendor = vendors.find(
-      (v) => String(v.VendorCode).trim() === String(formData.VendorCode).trim()
+      (v) => String(v.VendorCode).trim() === String(formData.VendorCode).trim(),
     );
     if (vendor) {
       setSelectedVendorId(vendor.Id);
@@ -220,7 +224,6 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
       <div className="row">
         <div className="col-md-12">
           <div className="Main-Boxpoup">
-
             <div className="bordered">
               <img src={logo} alt="Sona Logo" />
               <h1>Advance Payment (View)</h1>
@@ -243,7 +246,6 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
             </div>
 
             <div className="borderedbox">
-
               <div className="heading1" style={{ marginTop: "10px" }}>
                 <label>Requestor Information</label>
               </div>
@@ -275,7 +277,9 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                   <div className="col-md-4">
                     <label className="font">Employee Status</label>
                     &nbsp;:&nbsp;&nbsp;
-                    <label className="fonttext">{employee.EmployeeStatus}</label>
+                    <label className="fonttext">
+                      {employee.EmployeeStatus}
+                    </label>
                   </div>
                   <div className="col-md-4">
                     <label className="font">Division</label>
@@ -292,7 +296,9 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                   <div className="col-md-4">
                     <label className="font">RM</label>
                     &nbsp;:&nbsp;&nbsp;
-                    <label className="fonttext">{employee.ReportingManager?.Title}</label>
+                    <label className="fonttext">
+                      {employee.ReportingManager?.Title}
+                    </label>
                   </div>
                   <div className="col-md-4">
                     <label className="font">HOD</label>
@@ -319,39 +325,74 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                   </div>
                   <div className="col-md-4">
                     <label className="font">Vendor Name</label>
-                    <input value={vendorName} readOnly className="form-control readonly" />
+                    <input
+                      value={vendorName}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">PO Number</label>
-                    <input value={PONumber} readOnly className="form-control readonly" />
+                    <input
+                      value={PONumber}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                 </div>
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">PO Date</label>
-                    <input type="date" value={POdate} readOnly className="form-control readonly" />
+                    <input
+                      type="date"
+                      value={POdate}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">PO Payment Terms</label>
-                    <input value={POPaymentTerms} readOnly className="form-control readonly" />
+                    <input
+                      value={POPaymentTerms}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">PO Amount (GST)</label>
-                    <input value={POAmount} readOnly className="form-control readonly" />
+                    <input
+                      value={POAmount}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                 </div>
                 <div className="row mb-20">
                   <div className="col-md-4">
-                    <label className="font">Total Payment for the Project</label>
-                    <input value={TotalPaymentofProject} readOnly className="form-control readonly" />
+                    <label className="font">
+                      Total Payment for the Project
+                    </label>
+                    <input
+                      value={TotalPaymentofProject}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">GST Adjustment (if Any)</label>
-                    <input value={GSTAdjustmentifAny} readOnly className="form-control readonly" />
+                    <input
+                      value={GSTAdjustmentifAny}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">Other Adjustment</label>
-                    <input value={OtherAdjustmentifany} readOnly className="form-control readonly" />
+                    <input
+                      value={OtherAdjustmentifany}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                 </div>
                 <div className="row mb-20">
@@ -359,7 +400,11 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                     <label className="font" style={{ color: "red" }}>
                       Total Project Amount to be Capitalized
                     </label>
-                    <input value={TotalamounttobeCapitalized} readOnly className="form-control readonly" />
+                    <input
+                      value={TotalamounttobeCapitalized}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                 </div>
               </div>
@@ -372,21 +417,39 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">Voucher Date</label>
-                    <input type="date" value={voucherDate} readOnly className="form-control readonly" />
+                    <input
+                      type="date"
+                      value={voucherDate}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">Voucher Number</label>
-                    <input value={VoucherNumber} readOnly className="form-control readonly" />
+                    <input
+                      value={VoucherNumber}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">UTR Date</label>
-                    <input type="date" value={UTRDate} readOnly className="form-control readonly" />
+                    <input
+                      type="date"
+                      value={UTRDate}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                 </div>
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">UTR Number</label>
-                    <input value={UTRNumber} readOnly className="form-control readonly" />
+                    <input
+                      value={UTRNumber}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                 </div>
                 <div className="row mb-20">
@@ -410,27 +473,31 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                       <p>No history available</p>
                     ) : (
                       <div className="workflow-history">
-                        {workflowHistory.map((h, index) => (
-                          <div key={index} className="history-item">
-                            <div>
-                              {h.ActionTaken === "Submitted" && "📩 "}
-                              {h.ActionTaken === "Approved" && "✅ "}
-                              {h.ActionTaken === "Rejected" && "❌ "}
-                              {h.ActionTaken === "Send Back" && "↩ "}
-                              {h.ActionTaken === "Vouched" && "💰 "}
-                              {h.ActionTaken === "Paid" && "💸 "}
-                              {h.ActionTaken}
-                            </div>
-                            <div>
-                              <b>{h.CurrentApprover}</b>
-                            </div>
-                            <div>{h.Comment}</div>
-                            <div>
-                              {h.Date ? new Date(h.Date).toLocaleString() : ""}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Action By</th>
+                              <th>Action Taken</th>
+                              <th>Date</th>
+                              <th>Comment</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {workflowHistory.map((h: any, index: number) => (
+                              <tr key={index}>
+                                <td>{h.CurrentApprover}</td>
+                                <td>{h.ActionTaken}</td>
+                                <td>
+                                  {h.Date
+                                    ? new Date(h.Date).toLocaleString()
+                                    : ""}
+                                </td>
+                                <td>{h.Comment}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div> 
                     )}
                   </div>
                 </div>
@@ -448,7 +515,11 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                       <ul>
                         {attachments.map((file: any, index: number) => (
                           <li key={index}>
-                            <a href={file.ServerRelativeUrl} target="_blank" rel="noopener noreferrer">
+                            <a
+                              href={file.ServerRelativeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
                               {file.Name}
                             </a>
                           </li>
@@ -474,7 +545,6 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                   Back
                 </a>
               </div>
-
             </div>
           </div>
         </div>

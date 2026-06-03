@@ -233,19 +233,46 @@ button {
   background: #007bff;
 }
 
+//-----------------WORKFLOW HISTORY-----------------
+
 .workflow-history {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  width: 100%;
+  overflow-x: auto;
 }
 
-.history-item {
-  border: 1px solid #ccc;
-  padding: 10px;
-  border-radius: 6px;
+.workflow-history table {
+  width: 100%;
+  border-collapse: collapse;
 }
 
+.workflow-history table thead tr {
+  background: #000;
+}
 
+.workflow-history table thead th {
+    border: 1px solid #333;
+    color: #ffffff;
+    background-color: black;
+    border: 1px solid gray;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 12px;
+    text-align: left;
+}
+
+.workflow-history table tbody tr {
+  border-bottom: 1px solid #ddd;
+}
+
+.workflow-history table tbody td {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #333;
+  border: 1px solid #ddd;
+  vertical-align: top;
+}
+
+//-----------------END OF WORKFLOW HISTORY-----------------
 
 .Main-Boxpoup {
   background-color: #fff;

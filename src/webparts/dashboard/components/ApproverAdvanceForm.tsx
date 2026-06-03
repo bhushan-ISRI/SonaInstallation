@@ -63,14 +63,15 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
   const isPaid = norm(itemData?.Status) === "paid";
   const isSentBack = norm(itemData?.Status) === "send back";
   const isSaveAsDraft = norm(itemData?.Status) === "save as draft";
-  const isPendingVouching = norm(itemData?.Status) === "pending for vouching update";
+  const isPendingVouching =
+    norm(itemData?.Status) === "pending for vouching update";
   const isPendingUTR = norm(itemData?.Status) === "pending for utr update";
   const isWithRequester = isSentBack || isSaveAsDraft;
 
   const currentApproverId = Number(itemData?.CurrentApproverId);
 
   const currentApproverMatrixIndex = approvalMatrix.findIndex(
-    (a: any) => Number(a.Id) === currentApproverId
+    (a: any) => Number(a.Id) === currentApproverId,
   );
 
   const initiatorClass: string = (() => {
@@ -88,7 +89,7 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
 
     const approverHistory = workflowHistory.find(
       (x: any) =>
-        norm(x.ActionBy || x.CurrentApprover || "") === norm(approver.Name)
+        norm(x.ActionBy || x.CurrentApprover || "") === norm(approver.Name),
     );
 
     if (
@@ -124,7 +125,9 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
       const safeCapexId = capexId.replace(/\//g, "_");
       const folderPath = `InstallationCommision/${safeCapexId}`;
       console.log("Folder Path:", folderPath);
-      const files = await sp.web.getFolderByServerRelativePath(folderPath).files();
+      const files = await sp.web
+        .getFolderByServerRelativePath(folderPath)
+        .files();
       console.log("Files:", files);
       setAttachments(files || []);
     } catch (error) {
@@ -147,7 +150,7 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
           "PaidAmount",
           "Status",
           "VendorCode",
-          "VoucherNumber"
+          "VoucherNumber",
         )
         .filter(`Status eq 'Paid' and VendorCode eq '${vendor.VendorCode}'`)
         .orderBy("Created", false)();
@@ -199,7 +202,9 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
       setItemData(item);
       setApproverRemarks("");
 
-      const matchedVendor = vendors.find((v) => v.VendorCode === item.VendorCode);
+      const matchedVendor = vendors.find(
+        (v) => v.VendorCode === item.VendorCode,
+      );
       setSelectedVendorId(matchedVendor?.Id || null);
       setSelectedVendorName(item.VendorName || "");
       setGstAdjustment(Number(item.GSTAdjustmentifAny || 0));
@@ -253,8 +258,12 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
     console.log("Vendor Master:", vendors);
     const vendor = vendors.find(
       (v) =>
-        String(v.VendorCode || "").trim().toLowerCase() ===
-        String(itemData.VendorCode || "").trim().toLowerCase()
+        String(v.VendorCode || "")
+          .trim()
+          .toLowerCase() ===
+        String(itemData.VendorCode || "")
+          .trim()
+          .toLowerCase(),
     );
     console.log("Matched Vendor:", vendor);
     if (vendor) {
@@ -277,7 +286,11 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
         await getItemById();
       } catch (err) {
         console.error("Load Error:", err);
-        await Swal.fire({ title: "Error", text: "Failed to load data", icon: "error" });
+        await Swal.fire({
+          title: "Error",
+          text: "Failed to load data",
+          icon: "error",
+        });
       }
     };
     void loadData();
@@ -286,23 +299,41 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
   const handleApprove = async () => {
     try {
       if (!approverRemarks?.trim()) {
-        await Swal.fire({ title: "Validation", text: "Please enter Remarks", icon: "warning" });
+        await Swal.fire({
+          title: "Validation",
+          text: "Please enter Remarks",
+          icon: "warning",
+        });
         return;
       }
-      const currentUserId = Number(context.pageContext.legacyPageContext.userId);
+      const currentUserId = Number(
+        context.pageContext.legacyPageContext.userId,
+      );
       if (Number(itemData.CurrentApproverId) !== currentUserId) {
-        await Swal.fire({ title: "Access Denied", text: "You are not the current approver.", icon: "warning" });
+        await Swal.fire({
+          title: "Access Denied",
+          text: "You are not the current approver.",
+          icon: "warning",
+        });
         return;
       }
-      const flow = itemData.ApprovalMatrix ? JSON.parse(itemData.ApprovalMatrix) : [];
-      const currentIndex = flow.findIndex((a: any) => Number(a.Id) === currentUserId);
+      const flow = itemData.ApprovalMatrix
+        ? JSON.parse(itemData.ApprovalMatrix)
+        : [];
+      const currentIndex = flow.findIndex(
+        (a: any) => Number(a.Id) === currentUserId,
+      );
       if (currentIndex === -1) {
-        await Swal.fire({ title: "Error", text: "User not found in approval matrix", icon: "error" });
+        await Swal.fire({
+          title: "Error",
+          text: "User not found in approval matrix",
+          icon: "error",
+        });
         return;
       }
       flow[currentIndex].Status = "Approved";
       const performerIndex = flow.findIndex(
-        (x: any) => x.Role && x.Role.toLowerCase().trim() === "performer"
+        (x: any) => x.Role && x.Role.toLowerCase().trim() === "performer",
       );
       const beforePerformerIndex = performerIndex > 0 ? performerIndex - 1 : -1;
       let nextApproverId: number | null = null;
@@ -319,38 +350,57 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
         nextApproverId = null;
         finalStatus = "Approved";
       }
-      const history = itemData.WorkFlowHistory ? JSON.parse(itemData.WorkFlowHistory) : [];
+      const history = itemData.WorkFlowHistory
+        ? JSON.parse(itemData.WorkFlowHistory)
+        : [];
       history.push({
         CurrentApprover: context.pageContext.user.displayName,
         ActionTaken: "Approved",
         Comment: approverRemarks,
         Date: new Date().toISOString(),
       });
-      await sp.web.lists.getByTitle("Installation").items.getById(itemId).update({
-        ApproverRemarks: approverRemarks,
-        GSTAdjustmentifAny: gstAdjustment.toString(),
-        OtherAdjustmentifany: otherAdjustment.toString(),
-        TotalamounttobeCapitalized: totalCapitalizedAmount.toString(),
-        Status: finalStatus,
-        ApprovalMatrix: JSON.stringify(flow),
-        WorkFlowHistory: JSON.stringify(history),
-        CurrentApproverId: nextApproverId,
+      await sp.web.lists
+        .getByTitle("Installation")
+        .items.getById(itemId)
+        .update({
+          ApproverRemarks: approverRemarks,
+          GSTAdjustmentifAny: gstAdjustment.toString(),
+          OtherAdjustmentifany: otherAdjustment.toString(),
+          TotalamounttobeCapitalized: totalCapitalizedAmount.toString(),
+          Status: finalStatus,
+          ApprovalMatrix: JSON.stringify(flow),
+          WorkFlowHistory: JSON.stringify(history),
+          CurrentApproverId: nextApproverId,
+        });
+      await Swal.fire({
+        title: "Success",
+        text: "Approved Successfully",
+        icon: "success",
       });
-      await Swal.fire({ title: "Success", text: "Approved Successfully", icon: "success" });
       onClose();
     } catch (error) {
       console.error("Approval Error:", error);
-      await Swal.fire({ title: "Error", text: "Something went wrong while approving.", icon: "error" });
+      await Swal.fire({
+        title: "Error",
+        text: "Something went wrong while approving.",
+        icon: "error",
+      });
     }
   };
 
   const handleSendBack = async () => {
     try {
       if (!approverRemarks) {
-        await Swal.fire({ title: "Validation", text: "Please enter Remarks", icon: "warning" });
+        await Swal.fire({
+          title: "Validation",
+          text: "Please enter Remarks",
+          icon: "warning",
+        });
         return;
       }
-      const flow = itemData.ApprovalMatrix ? JSON.parse(itemData.ApprovalMatrix) : [];
+      const flow = itemData.ApprovalMatrix
+        ? JSON.parse(itemData.ApprovalMatrix)
+        : [];
       const currentUserId = context.pageContext.legacyPageContext.userId;
       const currentIndex = flow.findIndex((a: any) => a.Id === currentUserId);
       if (currentIndex !== -1) {
@@ -361,21 +411,30 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
         flow[currentIndex - 1].Status = "In Progress";
         previousApproverId = flow[currentIndex - 1].Id;
       }
-      const history = itemData.WorkFlowHistory ? JSON.parse(itemData.WorkFlowHistory) : [];
+      const history = itemData.WorkFlowHistory
+        ? JSON.parse(itemData.WorkFlowHistory)
+        : [];
       history.push({
         CurrentApprover: context.pageContext.user.displayName,
         ActionTaken: "Send Back",
         Comment: approverRemarks,
         Date: new Date().toISOString(),
       });
-      await sp.web.lists.getByTitle("Installation").items.getById(itemId).update({
-        ApproverRemarks: approverRemarks,
-        Status: "Send Back",
-        ApprovalMatrix: JSON.stringify(flow),
-        WorkFlowHistory: JSON.stringify(history),
-        CurrentApproverId: previousApproverId,
+      await sp.web.lists
+        .getByTitle("Installation")
+        .items.getById(itemId)
+        .update({
+          ApproverRemarks: approverRemarks,
+          Status: "Send Back",
+          ApprovalMatrix: JSON.stringify(flow),
+          WorkFlowHistory: JSON.stringify(history),
+          CurrentApproverId: previousApproverId,
+        });
+      await Swal.fire({
+        title: "Success",
+        text: "Request sent back successfully",
+        icon: "success",
       });
-      await Swal.fire({ title: "Success", text: "Request sent back successfully", icon: "success" });
       onClose();
     } catch (error) {
       console.error(error);
@@ -386,19 +445,39 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
     try {
       const flow: any[] = [];
       if (employeeData.ReportingManagerId) {
-        flow.push({ Id: employeeData.ReportingManagerId, Name: employeeData.ReportingManager, Role: "RM", Status: "Pending" });
+        flow.push({
+          Id: employeeData.ReportingManagerId,
+          Name: employeeData.ReportingManager,
+          Role: "RM",
+          Status: "Pending",
+        });
       }
       if (employeeData.HODId) {
-        flow.push({ Id: employeeData.HODId, Name: employeeData.HOD, Role: "HOD", Status: "" });
+        flow.push({
+          Id: employeeData.HODId,
+          Name: employeeData.HOD,
+          Role: "HOD",
+          Status: "",
+        });
       }
       const matrix = await sp.web.lists
         .getByTitle("InstallationCommisionApprovalMatrix")
-        .items.select("Approver/Id", "Approver/Title", "Role/RoleName", "Level/Level")
+        .items.select(
+          "Approver/Id",
+          "Approver/Title",
+          "Role/RoleName",
+          "Level/Level",
+        )
         .expand("Approver", "Role", "Level")
         .filter("Status eq 'Active'")
         .orderBy("Level", true)();
       matrix.forEach((m: any) => {
-        flow.push({ Id: m.Approver.Id, Name: m.Approver.Title, Role: m.Role.RoleName, Status: "" });
+        flow.push({
+          Id: m.Approver.Id,
+          Name: m.Approver.Title,
+          Role: m.Role.RoleName,
+          Status: "",
+        });
       });
       if (flow.length > 0) flow[0].Status = "In Progress";
       return flow;
@@ -411,28 +490,43 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
   const handleReject = async () => {
     try {
       if (!approverRemarks?.trim()) {
-        await Swal.fire({ title: "Validation", text: "Please enter Remarks", icon: "warning" });
+        await Swal.fire({
+          title: "Validation",
+          text: "Please enter Remarks",
+          icon: "warning",
+        });
         return;
       }
-      const flow = itemData.ApprovalMatrix ? JSON.parse(itemData.ApprovalMatrix) : [];
+      const flow = itemData.ApprovalMatrix
+        ? JSON.parse(itemData.ApprovalMatrix)
+        : [];
       const currentUserId = context.pageContext.legacyPageContext.userId;
       const currentIndex = flow.findIndex((a: any) => a.Id === currentUserId);
       if (currentIndex !== -1) flow[currentIndex].Status = "Reject";
-      const history = itemData.WorkFlowHistory ? JSON.parse(itemData.WorkFlowHistory) : [];
+      const history = itemData.WorkFlowHistory
+        ? JSON.parse(itemData.WorkFlowHistory)
+        : [];
       history.push({
         CurrentApprover: context.pageContext.user.displayName,
         ActionTaken: "Reject",
         Comment: approverRemarks,
         Date: new Date().toISOString(),
       });
-      await sp.web.lists.getByTitle("Installation").items.getById(itemId).update({
-        ApproverRemarks: approverRemarks,
-        Status: "Reject",
-        ApprovalMatrix: JSON.stringify(flow),
-        WorkFlowHistory: JSON.stringify(history),
-        CurrentApproverId: null,
+      await sp.web.lists
+        .getByTitle("Installation")
+        .items.getById(itemId)
+        .update({
+          ApproverRemarks: approverRemarks,
+          Status: "Reject",
+          ApprovalMatrix: JSON.stringify(flow),
+          WorkFlowHistory: JSON.stringify(history),
+          CurrentApproverId: null,
+        });
+      await Swal.fire({
+        title: "Success",
+        text: "Request rejected successfully",
+        icon: "success",
       });
-      await Swal.fire({ title: "Success", text: "Request rejected successfully", icon: "success" });
       onClose();
     } catch (error) {
       console.error(error);
@@ -478,43 +572,76 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
               <div className="main-formcontainer">
                 <div className="row mb-20">
                   <div className="col-md-4">
-                    <label htmlFor="Employee Code" className="font">Employee Code</label> : &nbsp;&nbsp;
+                    <label htmlFor="Employee Code" className="font">
+                      Employee Code
+                    </label>{" "}
+                    : &nbsp;&nbsp;
                     <label className="fonttext"> {itemData.EmployeeCode}</label>
                   </div>
                   <div className="col-md-4">
-                    <label htmlFor="Employee Name" className="font">Employee Name </label> : &nbsp;&nbsp;
+                    <label htmlFor="Employee Name" className="font">
+                      Employee Name{" "}
+                    </label>{" "}
+                    : &nbsp;&nbsp;
                     <label className="fonttext"> {itemData.EmployeeName}</label>
                   </div>
                   <div className="col-md-4">
-                    <label htmlFor="Employee Email" className="font">Employee Email </label> : &nbsp;&nbsp;
+                    <label htmlFor="Employee Email" className="font">
+                      Employee Email{" "}
+                    </label>{" "}
+                    : &nbsp;&nbsp;
                     <label className="fonttext"> {itemData.Email}</label>
                   </div>
                 </div>
                 <div className="row mb-20">
                   <div className="col-md-4">
-                    <label htmlFor="Contact No" className="font">Contact No</label> : &nbsp;&nbsp;
+                    <label htmlFor="Contact No" className="font">
+                      Contact No
+                    </label>{" "}
+                    : &nbsp;&nbsp;
                     <label className="fonttext"> {itemData.ContactNo}</label>
                   </div>
                   <div className="col-md-4">
-                    <label htmlFor="Employee Status" className="font">Employee Status</label> : &nbsp;&nbsp;
-                    <label className="fonttext"> {itemData.EmployeeStatus}</label>
+                    <label htmlFor="Employee Status" className="font">
+                      Employee Status
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">
+                      {" "}
+                      {itemData.EmployeeStatus}
+                    </label>
                   </div>
                   <div className="col-md-4">
-                    <label htmlFor="Division" className="font">Division</label> : &nbsp;&nbsp;
+                    <label htmlFor="Division" className="font">
+                      Division
+                    </label>{" "}
+                    : &nbsp;&nbsp;
                     <label className="fonttext"> {itemData.Division}</label>
                   </div>
                 </div>
                 <div className="row mb-20">
                   <div className="col-md-4">
-                    <label htmlFor="Location" className="font">Location</label> : &nbsp;&nbsp;
+                    <label htmlFor="Location" className="font">
+                      Location
+                    </label>{" "}
+                    : &nbsp;&nbsp;
                     <label className="fonttext"> {itemData.Location}</label>
                   </div>
                   <div className="col-md-4">
-                    <label htmlFor="RM" className="font">RM</label> : &nbsp;&nbsp;
-                    <label className="fonttext"> {itemData.ReportingManager}</label>
+                    <label htmlFor="RM" className="font">
+                      RM
+                    </label>{" "}
+                    : &nbsp;&nbsp;
+                    <label className="fonttext">
+                      {" "}
+                      {itemData.ReportingManager}
+                    </label>
                   </div>
                   <div className="col-md-4">
-                    <label htmlFor="HOD" className="font">HOD</label> : &nbsp;&nbsp;
+                    <label htmlFor="HOD" className="font">
+                      HOD
+                    </label>{" "}
+                    : &nbsp;&nbsp;
                     <label className="fonttext"> {itemData.HOD}</label>
                   </div>
                 </div>
@@ -526,15 +653,26 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">Vendor Code</label>
-                    <input type="text" value={itemData?.VendorCode || selectedVendorCode || ""} className="form-control readonly" readOnly />
+                    <input
+                      type="text"
+                      value={itemData?.VendorCode || selectedVendorCode || ""}
+                      className="form-control readonly"
+                      readOnly
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">Vendor Name</label>
-                    <input value={itemData.VendorName || ""} className="form-control readonly" />
+                    <input
+                      value={itemData.VendorName || ""}
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">PO Number</label>
-                    <input value={itemData.PONumber || ""} className="form-control readonly" />
+                    <input
+                      value={itemData.PONumber || ""}
+                      className="form-control readonly"
+                    />
                   </div>
                 </div>
                 <div className="row mb-20">
@@ -542,38 +680,72 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
                     <label className="font">PO Date</label>
                     <input
                       type="date"
-                      value={itemData.POdate ? new Date(itemData.POdate).toISOString().split("T")[0] : ""}
+                      value={
+                        itemData.POdate
+                          ? new Date(itemData.POdate)
+                              .toISOString()
+                              .split("T")[0]
+                          : ""
+                      }
                       className="form-control readonly"
                       readOnly
                     />
                   </div>
                   <div className="col-md-4">
                     <label className="font">PO Payment Terms</label>
-                    <input value={itemData.POPaymentTerms || ""} className="form-control readonly" />
+                    <input
+                      value={itemData.POPaymentTerms || ""}
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">PO Amount (GST)</label>
-                    <input value={itemData.POAmount || ""} className="form-control readonly" />
+                    <input
+                      value={itemData.POAmount || ""}
+                      className="form-control readonly"
+                    />
                   </div>
                 </div>
                 <div className="row mb-20">
                   <div className="col-md-4">
-                    <label className="font">Total Payment for the Project</label>
-                    <input value={itemData.TotalPaymentofProject || ""} className="form-control readonly" />
+                    <label className="font">
+                      Total Payment for the Project
+                    </label>
+                    <input
+                      value={itemData.TotalPaymentofProject || ""}
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">Gst Adjustment(Any)</label>
-                    <input type="number" value={gstAdjustment} onChange={(e) => setGstAdjustment(Number(e.target.value))} className="form-control" />
+                    <input
+                      type="number"
+                      value={gstAdjustment}
+                      onChange={(e) => setGstAdjustment(Number(e.target.value))}
+                      className="form-control"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">Other Adjustment</label>
-                    <input type="number" value={otherAdjustment} onChange={(e) => setOtherAdjustment(Number(e.target.value))} className="form-control" />
+                    <input
+                      type="number"
+                      value={otherAdjustment}
+                      onChange={(e) =>
+                        setOtherAdjustment(Number(e.target.value))
+                      }
+                      className="form-control"
+                    />
                   </div>
                 </div>
                 <div className="row mb-20">
                   <div className="col-md-4">
-                    <label className="font" style={{ color: "red" }}>Total Project Amount to be Capitalized</label>
-                    <input value={totalCapitalizedAmount.toFixed(2)} className="form-control readonly" />
+                    <label className="font" style={{ color: "red" }}>
+                      Total Project Amount to be Capitalized
+                    </label>
+                    <input
+                      value={totalCapitalizedAmount.toFixed(2)}
+                      className="form-control readonly"
+                    />
                   </div>
                 </div>
               </div>
@@ -600,20 +772,48 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
                         </thead>
                         <tbody>
                           {previousAdvances.length === 0 ? (
-                            <tr><td colSpan={9} style={{ textAlign: "center" }}>No Data</td></tr>
+                            <tr>
+                              <td colSpan={9} style={{ textAlign: "center" }}>
+                                No Data
+                              </td>
+                            </tr>
                           ) : (
                             previousAdvances.map((item: any, index: number) => {
-                              const pending = Math.max(0, Number(item.TotalPaymentofProject || 0) - Number(item.PaidAmount || 0));
+                              const pending = Math.max(
+                                0,
+                                Number(item.TotalPaymentofProject || 0) -
+                                  Number(item.PaidAmount || 0),
+                              );
                               return (
                                 <tr key={index}>
                                   <td className="px-4 py-2">{item.PONumber}</td>
-                                  <td className="px-4 py-2">{item.TotalPaymentofProject}</td>
-                                  <td className="px-4 py-2">{item.Created ? new Date(item.Created).toLocaleDateString() : ""}</td>
-                                  <td className="px-4 py-2">{item.VoucherDate ? new Date(item.VoucherDate).toLocaleDateString() : ""}</td>
-                                  <td className="px-4 py-2">{item.VoucherNumber}</td>
-                                  <td className="px-4 py-2">{item.PaidAmount}</td>
+                                  <td className="px-4 py-2">
+                                    {item.TotalPaymentofProject}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    {item.Created
+                                      ? new Date(
+                                          item.Created,
+                                        ).toLocaleDateString()
+                                      : ""}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    {item.VoucherDate
+                                      ? new Date(
+                                          item.VoucherDate,
+                                        ).toLocaleDateString()
+                                      : ""}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    {item.VoucherNumber}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    {item.PaidAmount}
+                                  </td>
                                   <td className="px-4 py-2">{pending}</td>
-                                  <td className="px-4 py-2">{item.PaidAmount}</td>
+                                  <td className="px-4 py-2">
+                                    {item.PaidAmount}
+                                  </td>
                                   <td className="px-4 py-2">{pending}</td>
                                 </tr>
                               );
@@ -646,18 +846,44 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
                         </thead>
                         <tbody>
                           {previousAdvances.length === 0 ? (
-                            <tr><td colSpan={7} style={{ textAlign: "center" }}>No Data</td></tr>
+                            <tr>
+                              <td colSpan={7} style={{ textAlign: "center" }}>
+                                No Data
+                              </td>
+                            </tr>
                           ) : (
                             previousAdvances.map((item: any, index: number) => {
-                              const pending = Math.max(0, Number(item.TotalPaymentofProject || 0) - Number(item.PaidAmount || 0));
+                              const pending = Math.max(
+                                0,
+                                Number(item.TotalPaymentofProject || 0) -
+                                  Number(item.PaidAmount || 0),
+                              );
                               return (
                                 <tr key={index}>
                                   <td className="px-4 py-2">{item.PONumber}</td>
-                                  <td className="px-4 py-2">{item.TotalPaymentofProject}</td>
-                                  <td className="px-4 py-2">{item.Created ? new Date(item.Created).toLocaleDateString() : ""}</td>
-                                  <td className="px-4 py-2">{item.VoucherDate ? new Date(item.VoucherDate).toLocaleDateString() : ""}</td>
-                                  <td className="px-4 py-2">{item.VoucherNumber}</td>
-                                  <td className="px-4 py-2">{item.PaidAmount}</td>
+                                  <td className="px-4 py-2">
+                                    {item.TotalPaymentofProject}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    {item.Created
+                                      ? new Date(
+                                          item.Created,
+                                        ).toLocaleDateString()
+                                      : ""}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    {item.VoucherDate
+                                      ? new Date(
+                                          item.VoucherDate,
+                                        ).toLocaleDateString()
+                                      : ""}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    {item.VoucherNumber}
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    {item.PaidAmount}
+                                  </td>
                                   <td className="px-4 py-2">{pending}</td>
                                 </tr>
                               );
@@ -679,22 +905,38 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
                       <p>No history available</p>
                     ) : (
                       <div className="workflow-history">
-                        {workflowHistory.map((h, index) => (
-                          <div key={index} className="history-item">
-                            <div>
-                              {h.ActionTaken === "Submitted" && "📩 "}
-                              {h.ActionTaken === "Approved" && "✅ "}
-                              {h.ActionTaken === "Rejected" && "❌ "}
-                              {h.ActionTaken === "Send Back" && "↩ "}
-                              {h.ActionTaken === "Vouched" && "💰 "}
-                              {h.ActionTaken === "Paid" && "💸 "}
-                              {h.ActionTaken}
-                            </div>
-                            <div><b>{h.CurrentApprover}</b></div>
-                            <div>{h.Comment}</div>
-                            <div>{h.Date ? new Date(h.Date).toLocaleString() : ""}</div>
+                        {workflowHistory.length === 0 ? (
+                          <p>No history available</p>
+                        ) : (
+                          <div className="workflow-history">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Action By</th>
+                                  <th>Action Taken</th>
+                                  <th>Date</th>
+                                  <th>Comment</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {workflowHistory.map(
+                                  (h: any, index: number) => (
+                                    <tr key={index}>
+                                      <td>{h.CurrentApprover}</td>
+                                      <td>{h.ActionTaken}</td>
+                                      <td>
+                                        {h.Date
+                                          ? new Date(h.Date).toLocaleString()
+                                          : ""}
+                                      </td>
+                                      <td>{h.Comment}</td>
+                                    </tr>
+                                  ),
+                                )}
+                              </tbody>
+                            </table>
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
                   </div>
@@ -707,7 +949,10 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
                 <div className="row mb-20">
                   <div className="col-md-12">
                     <label className="font">Approver Remarks</label>
-                    <textarea value={approverRemarks} onChange={(e) => setApproverRemarks(e.target.value)} />
+                    <textarea
+                      value={approverRemarks}
+                      onChange={(e) => setApproverRemarks(e.target.value)}
+                    />
                   </div>
                 </div>
               </div>
@@ -724,7 +969,9 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
                       <ul>
                         {attachments.map((file: any, index: number) => (
                           <li key={index}>
-                            <a href={file.ServerRelativeUrl} target="_blank">{file.Name}</a>
+                            <a href={file.ServerRelativeUrl} target="_blank">
+                              {file.Name}
+                            </a>
                           </li>
                         ))}
                       </ul>
@@ -732,11 +979,27 @@ const ApproverAdvanceForm: React.FC<IProps> = ({
                   </div>
                 </div>
               </div>
-              <div style={{ display: "flex", justifyContent: "center", gap: "5px", marginBottom: "1rem", marginTop: "1rem" }}>
-                <a onClick={handleApprove} className="submit-btn">Approve</a>
-                <a onClick={handleSendBack} className="Rework-btn">Sent Back</a>
-                <a onClick={handleReject} className="Reject-btn">Reject</a>
-                <a onClick={handleExit} className="reset-btn">Exit</a>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  gap: "5px",
+                  marginBottom: "1rem",
+                  marginTop: "1rem",
+                }}
+              >
+                <a onClick={handleApprove} className="submit-btn">
+                  Approve
+                </a>
+                <a onClick={handleSendBack} className="Rework-btn">
+                  Sent Back
+                </a>
+                <a onClick={handleReject} className="Reject-btn">
+                  Reject
+                </a>
+                <a onClick={handleExit} className="reset-btn">
+                  Exit
+                </a>
               </div>
             </div>
           </div>
