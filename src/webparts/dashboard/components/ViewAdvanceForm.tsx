@@ -33,7 +33,7 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
   const [workflowHistory, setWorkflowHistory] = useState<any[]>([]);
   const [approverRemarks, setApproverRemarks] = useState("");
   const [voucherDate, setVoucherDate] = useState("");
-  const [VouchingNumber, setVouchingNumber] = useState("");
+  const [VoucherNumber, setVoucherNumber] = useState("");
   const [UTRDate, setUTRDate] = useState("");
   const [UTRNumber, setUTRNumber] = useState("");
 
@@ -79,9 +79,23 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
   const getApproverRibbonClass = (approver: any, index: number): string => {
     if (isPaid) return "approved";
     if (isSaveAsDraft || isSentBack) return "pending";
-    if (isPendingVouching || isPendingUTR) return "approved";
+
     if (norm(approver.Name) === rejectedByName) return "rejected";
     if (isRejected && index >= approvedCount) return "pending";
+
+    if (isPendingUTR) {
+      const performerIndex = approverDetails.findIndex(
+        (x: any) => x.Role && x.Role.toLowerCase().trim() === "performer"
+      );
+      if (performerIndex !== -1) {
+        if (index === performerIndex) return "current";
+        if (index < performerIndex) return "approved";
+        return "pending";
+      }
+    }
+
+    if (isPendingVouching) return "approved";
+
     if (index < approvedCount) return "approved";
     if (index === approvedCount) return "current";
     return "pending";
@@ -152,7 +166,7 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
     setVendorName(formData.VendorName || "");
     setApproverRemarks(formData.ApproverRemarks || "");
     setVoucherDate(formData.VoucherDate?.split("T")[0] || "");
-    setVouchingNumber(formData.VouchingNumber || "");
+    setVoucherNumber(formData.VoucherNumber || "");
     setUTRDate(formData.UTRDate?.split("T")[0] || "");
     setUTRNumber(formData.UTRNumber || "");
 
@@ -222,6 +236,8 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                   className={`ribbon-step ${getApproverRibbonClass(approver, index)}`}
                 >
                   {approver.Name}
+                  <br />
+                  <small>{approver.Role}</small>
                 </div>
               ))}
             </div>
@@ -294,24 +310,12 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">Vendor Code</label>
-                    <select
-                      value={selectedVendorId ?? ""}
-                      disabled={true}
-                      className="formtext-control readonly"
-                      onChange={(e) => {
-                        const id = Number(e.target.value);
-                        const vendor = vendors.find((v) => v.Id === id);
-                        setSelectedVendorId(id);
-                        setSelectedVendorName(vendor?.VendorName || "");
-                      }}
-                    >
-                      <option value="">Select Vendor</option>
-                      {vendors.map((v: IVendor) => (
-                        <option key={v.Id} value={v.Id}>
-                          {v.VendorCode}
-                        </option>
-                      ))}
-                    </select>
+                    <input
+                      type="text"
+                      value={formData?.VendorCode || selectedVendorCode || ""}
+                      readOnly
+                      className="form-control readonly"
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">Vendor Name</label>
@@ -372,7 +376,7 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                   </div>
                   <div className="col-md-4">
                     <label className="font">Voucher Number</label>
-                    <input value={VouchingNumber} readOnly className="form-control readonly" />
+                    <input value={VoucherNumber} readOnly className="form-control readonly" />
                   </div>
                   <div className="col-md-4">
                     <label className="font">UTR Date</label>
@@ -386,11 +390,48 @@ const ViewAdvanceForm = ({ context, formData, onClose }: any) => {
                   </div>
                 </div>
                 <div className="row mb-20">
-                  <div className="col-md-12">
+                  {/* <div className="col-md-12">
                     <label className="font">Approver Remarks</label>
                     <label className="fonttext textbox readonly" style={{ width: "100%", height: "auto" }}>
                       {approverRemarks}
                     </label>
+                  </div> */}
+                </div>
+              </div>
+
+              <div className="heading1" style={{ marginTop: "10px" }}>
+                <label>Workflow History</label>
+              </div>
+
+              <div className="main-formcontainer">
+                <div className="row mb-20">
+                  <div className="col-md-12">
+                    {workflowHistory.length === 0 ? (
+                      <p>No history available</p>
+                    ) : (
+                      <div className="workflow-history">
+                        {workflowHistory.map((h, index) => (
+                          <div key={index} className="history-item">
+                            <div>
+                              {h.ActionTaken === "Submitted" && "📩 "}
+                              {h.ActionTaken === "Approved" && "✅ "}
+                              {h.ActionTaken === "Rejected" && "❌ "}
+                              {h.ActionTaken === "Send Back" && "↩ "}
+                              {h.ActionTaken === "Vouched" && "💰 "}
+                              {h.ActionTaken === "Paid" && "💸 "}
+                              {h.ActionTaken}
+                            </div>
+                            <div>
+                              <b>{h.CurrentApprover}</b>
+                            </div>
+                            <div>{h.Comment}</div>
+                            <div>
+                              {h.Date ? new Date(h.Date).toLocaleString() : ""}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

@@ -11,10 +11,12 @@ import {
 } from "@pnp/spfx-controls-react/lib/PeoplePicker";
 import { useEffect, useState } from "react";
 import { IPeoplePickerContext } from "@pnp/spfx-controls-react/lib/PeoplePicker";
+import Swal from "sweetalert2";
+
 interface IProps {
   context: any;
-  itemId: number; // 👈 IMPORTANT,
-  formData: any; // 👈 IMPORTANT
+  itemId: number;
+  formData: any;
   onClose: () => void;
 }
 interface IVendor {
@@ -22,6 +24,7 @@ interface IVendor {
   VendorCode: string;
   VendorName: string;
 }
+
 const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
   context,
   itemId,
@@ -33,40 +36,100 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
   const [previousAdvances, setPreviousAdvances] = useState<any[]>([]);
   const [itemData, setItemData] = useState<any>(null);
   const [approverRemarks, setApproverRemarks] = useState("");
-  const [voucherDate, setVoucherDate] = useState("");
   const [selectedVendorName, setSelectedVendorName] = useState("");
+  const [selectedVendorCode, setSelectedVendorCode] = useState("");
   const [vendors, setVendors] = useState<IVendor[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
-  const [voucherNumber, setVoucherNumber] = useState("");
   const [UTRDate, setUTRDate] = useState("");
   const [UTRNumber, setUTRNumber] = useState("");
   const [UTRRemarks, setUTRRemarks] = useState("");
   const [approvalMatrix, setApprovalMatrix] = useState<any[]>([]);
   const [workflowHistory, setWorkflowHistory] = useState<any[]>([]);
-  // ✅ Fetch Item by ID
+
   const peoplePickerContext: IPeoplePickerContext = {
     absoluteUrl: context.pageContext.web.absoluteUrl,
     msGraphClientFactory: context.msGraphClientFactory,
     spHttpClient: context.spHttpClient,
   };
 
+  const norm = (s: string) => (s || "").toLowerCase().trim();
+
+  const isPaid = norm(itemData?.Status) === "paid";
+  const isPendingUTR = norm(itemData?.Status) === "pending for utr update";
+  const isSentBack = norm(itemData?.Status) === "send back";
+  const isSaveAsDraft = norm(itemData?.Status) === "save as draft";
+  const isWithRequester = isSentBack || isSaveAsDraft;
+
+  const currentApproverId = Number(itemData?.CurrentApproverId);
+
+  const currentApproverMatrixIndex = approvalMatrix.findIndex(
+    (a: any) => Number(a.Id) === currentApproverId
+  );
+
+  const initiatorClass: string = (() => {
+    if (isPaid) return "approved";
+    if (isWithRequester) return "current";
+    if (currentApproverMatrixIndex >= 0) return "approved";
+    return "pending";
+  })();
+
+  const getApproverRibbonClass = (approver: any, index: number): string => {
+    if (isPaid) return "approved";
+    if (isWithRequester) return "pending";
+
+    const approverHistory = workflowHistory.find(
+      (x: any) =>
+        norm(x.ActionBy || x.CurrentApprover || "") === norm(approver.Name)
+    );
+
+    if (
+      norm(approverHistory?.ActionTaken) === "reject" ||
+      norm(approverHistory?.ActionTaken) === "rejected" ||
+      norm(approverHistory?.Action) === "reject" ||
+      norm(approverHistory?.Action) === "rejected"
+    ) {
+      return "rejected";
+    }
+
+    if (
+      norm(approverHistory?.ActionTaken) === "approved" ||
+      norm(approverHistory?.Action) === "approved"
+    ) {
+      return "approved";
+    }
+
+    if (isPendingUTR) {
+      const performerIndex = approvalMatrix.findIndex(
+        (x: any) => x.Role && x.Role.toLowerCase().trim() === "performer"
+      );
+      if (index === performerIndex) return "current";
+      if (index < performerIndex) return "approved";
+    }
+
+    if (Number(approver.Id) === currentApproverId) {
+      return "current";
+    }
+
+    if (index < currentApproverMatrixIndex) {
+      return "approved";
+    }
+
+    return "pending";
+  };
+
   const getAttachments = async (capexId: string) => {
     try {
       const safe = capexId.replace(/\//g, "_");
       const path = `/sites/SonaFinance/InstallationCommision/${safe}`;
-
       const files = await sp.web.getFolderByServerRelativePath(path).files();
-
       void setAttachments(files);
     } catch {
       void setAttachments([]);
     }
   };
+
   const getPreviousAdvances = async (vendorId: number) => {
     try {
-      debugger;
-      console.log("Fetching for Vendor:", vendorId);
-
       const data = await sp.web.lists
         .getByTitle("CapexAdvance")
         .items.select(
@@ -74,7 +137,6 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
           "RequestAdvanceAmount",
           "Created",
           "VoucherDate",
-
           "PaidAmount",
           "Status",
           "VendorCode/Id",
@@ -82,9 +144,6 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
         .expand("VendorCode")
         .filter(`VendorCode/Id eq ${vendorId} and Status eq 'Paid'`)
         .orderBy("Created", false)();
-
-      console.log("DATA:", data);
-
       void setPreviousAdvances(data);
     } catch (error) {
       console.error("Error fetching previous advances:", error);
@@ -97,13 +156,12 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
       const data = await sp.web.lists
         .getByTitle("VendorMaster")
         .items.select("Id", "VendorCode", "VendorName")();
-
       setVendors(data);
     } catch (error) {
       console.error("Vendor fetch error:", error);
     }
   };
-  // ✅ Fetch Item by ID
+
   const getItemById = async () => {
     try {
       const item = await sp.web.lists
@@ -111,36 +169,29 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
         .items.getById(itemId)
         .select("*")
         .expand("")();
-      // 👈 ADD
 
       setItemData(item);
       setApproverRemarks(item.ApproverRemarks || "");
 
-      // ✅ FIX: Set VendorId + Name
       const matchedVendor = vendors.find(
-        (v) => v.VendorCode === item.VendorCode,
+        (v) => String(v.VendorCode).trim() === String(item.VendorCode).trim()
       );
-
       setSelectedVendorId(matchedVendor?.Id || null);
       setSelectedVendorName(item.VendorName || "");
+      setSelectedVendorCode(item.VendorCode || "");
 
-      // 🔥 IMPORTANT
-      setSelectedVendorName(item.VendorName); // optional
-      // setGstAdjustment(Number(item.GSTAdjustmentifAny || 0));
-      //setOtherAdjustment(Number(item.OtherAdjustmentifany || 0));
-
-      // ✅ FETCH ATTACHMENTS
-      if (item.PaymentId) {
+      if (item.CapexID) {
+        await getAttachments(item.CapexID);
+      } else if (item.PaymentId) {
         await getAttachments(item.PaymentId);
       }
-      // ✅ Approval Matrix (SAFE PARSE)
+
       if (item.ApprovalMatrix) {
         try {
           const parsed =
             typeof item.ApprovalMatrix === "string"
               ? JSON.parse(item.ApprovalMatrix)
               : item.ApprovalMatrix;
-
           setApprovalMatrix(Array.isArray(parsed) ? parsed : []);
         } catch (e) {
           console.error("ApprovalMatrix parse error", e);
@@ -150,14 +201,12 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
         setApprovalMatrix([]);
       }
 
-      // ✅ Workflow History (SAFE PARSE)
       if (item.WorkFlowHistory) {
         try {
           const parsed =
             typeof item.WorkFlowHistory === "string"
               ? JSON.parse(item.WorkFlowHistory)
               : item.WorkFlowHistory;
-
           setWorkflowHistory(Array.isArray(parsed) ? parsed : []);
         } catch (e) {
           console.error("WorkFlowHistory parse error", e);
@@ -173,38 +222,54 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
 
   useEffect(() => {
     if (!context || !itemId) return;
-
     const loadData = async () => {
-      //await getItemById(); // 👈 FIRST load item to get VendorCode
-      await getVendors(); // 👈 FIRST load vendors
-      await getItemById(); // 👈 THEN item
+      await getVendors();
+      await getItemById();
     };
-
     void loadData();
   }, [context, itemId]);
 
-  // ✅ Approve
+  useEffect(() => {
+    if (!itemData || vendors.length === 0) return;
+    const vendor = vendors.find(
+      (v) =>
+        String(v.VendorCode).trim().toLowerCase() ===
+        String(itemData.VendorCode).trim().toLowerCase()
+    );
+    if (vendor) {
+      setSelectedVendorId(vendor.Id);
+      setSelectedVendorName(vendor.VendorName);
+      setSelectedVendorCode(vendor.VendorCode);
+      void getPreviousAdvances(vendor.Id);
+    } else {
+      setSelectedVendorId(null);
+      setSelectedVendorName(itemData.VendorName || "");
+      setSelectedVendorCode(itemData.VendorCode || "");
+    }
+  }, [itemData, vendors]);
+
   const handleApprove = async () => {
     try {
       if (!UTRDate || !UTRNumber || !UTRRemarks) {
-        alert("All fields required");
+        await Swal.fire({
+          title: "Validation",
+          text: "UTR Date, UTR Number and UTR Remarks are required.",
+          icon: "warning",
+        });
         return;
       }
 
-      // 🔥 FLOW
       const flow = itemData.ApprovalMatrix
         ? JSON.parse(itemData.ApprovalMatrix)
         : [];
 
       const currentUserId = context.pageContext.legacyPageContext.userId;
-
       const currentIndex = flow.findIndex((a: any) => a.Id === currentUserId);
 
       if (currentIndex !== -1) {
         flow[currentIndex].Status = "Approved";
       }
 
-      // 🔥 HISTORY
       const history = itemData.WorkFlowHistory
         ? JSON.parse(itemData.WorkFlowHistory)
         : [];
@@ -223,30 +288,28 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
           ApproverRemarks: approverRemarks,
           UTRDate: new Date(UTRDate),
           UTRNumber: UTRNumber,
-          //UTRRemarks: UTRRemarks,
-
           Status: "Paid",
-
           ApprovalMatrix: JSON.stringify(flow),
           WorkFlowHistory: JSON.stringify(history),
-
-          CurrentApproverId: null, // ✅ FINAL STAGE
+          CurrentApproverId: null,
         });
 
-      alert("Paid successfully ✅");
-
+      await Swal.fire({ title: "Success", text: "Paid Successfully", icon: "success" });
       onClose();
     } catch (error) {
       console.error(error);
-      alert("Error ❌");
+      await Swal.fire({ title: "Error", text: "Something went wrong.", icon: "error" });
     }
   };
 
-  // ✅ Sent Back
   const handleSendBack = async () => {
     try {
       if (!UTRRemarks) {
-        alert("Please enter remarks");
+        await Swal.fire({
+          title: "Validation",
+          text: "Please enter UTR Remarks.",
+          icon: "warning",
+        });
         return;
       }
 
@@ -255,21 +318,18 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
         : [];
 
       const currentUserId = context.pageContext.legacyPageContext.userId;
-
       const currentIndex = flow.findIndex((a: any) => a.Id === currentUserId);
 
       if (currentIndex !== -1) {
         flow[currentIndex].Status = "Send Back";
       }
 
-      // 🔥 MOVE BACK
       let previousApproverId = null;
       if (flow[currentIndex - 1]) {
         flow[currentIndex - 1].Status = "In Progress";
         previousApproverId = flow[currentIndex - 1].Id;
       }
 
-      // 🔥 HISTORY
       const history = itemData.WorkFlowHistory
         ? JSON.parse(itemData.WorkFlowHistory)
         : [];
@@ -287,26 +347,26 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
         .update({
           ApproverRemarks: approverRemarks,
           Status: "Send Back",
-
           ApprovalMatrix: JSON.stringify(flow),
           WorkFlowHistory: JSON.stringify(history),
-
-          CurrentApproverId: null,
+          CurrentApproverId: previousApproverId,
         });
 
-      alert("Send Back ✅");
-
+      await Swal.fire({ title: "Success", text: "Request Sent Back Successfully", icon: "success" });
       onClose();
     } catch (error) {
       console.error(error);
     }
   };
 
-  // ✅ Reject
   const handleReject = async () => {
     try {
       if (!UTRRemarks) {
-        alert("Please enter remarks");
+        await Swal.fire({
+          title: "Validation",
+          text: "Please enter UTR Remarks.",
+          icon: "warning",
+        });
         return;
       }
 
@@ -315,11 +375,10 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
         : [];
 
       const currentUserId = context.pageContext.legacyPageContext.userId;
-
       const currentIndex = flow.findIndex((a: any) => a.Id === currentUserId);
 
       if (currentIndex !== -1) {
-        flow[currentIndex].Status = "Rejected";
+        flow[currentIndex].Status = "Reject";
       }
 
       const history = itemData.WorkFlowHistory
@@ -328,7 +387,7 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
 
       history.push({
         CurrentApprover: context.pageContext.user.displayName,
-        ActionTaken: "Rejected",
+        ActionTaken: "Reject",
         Comment: UTRRemarks,
         Date: new Date().toISOString(),
       });
@@ -338,16 +397,13 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
         .items.getById(itemId)
         .update({
           ApproverRemarks: approverRemarks,
-          Status: "Rejected",
-
+          Status: "Reject",
           ApprovalMatrix: JSON.stringify(flow),
           WorkFlowHistory: JSON.stringify(history),
-
           CurrentApproverId: null,
         });
 
-      alert("Rejected ❌");
-
+      await Swal.fire({ title: "Success", text: "Request Rejected Successfully", icon: "success" });
       onClose();
     } catch (error) {
       console.error(error);
@@ -358,7 +414,6 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
     onClose();
   };
 
-  // ⛔ Wait until data loads
   if (!itemData) return <div>Loading...</div>;
 
   return (
@@ -366,37 +421,25 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
       <div className="row">
         <div className="col-md-12">
           <div className="Main-Boxpoup">
-            {/* 🔹 Header */}
             <div className="bordered">
               <img src={logo} />
-              <h1> Advance Payment (Approver) </h1>
+              <h1> Installation Commisioning Request(AP Performer - UTR) </h1>
             </div>
-            {approvalMatrix.length === 0 ? (
-              <p>No approval data</p>
-            ) : (
-              <div className="displayWF">
-                <ul className="approval-flow">
-                  {approvalMatrix.map((a, index) => (
-                    <li
-                      key={index}
-                      className={`approval-step ${
-                        a.Status === "In Progress"
-                          ? "active"
-                          : a.Status === "Approved"
-                            ? "approved"
-                            : a.Status === "Rejected"
-                              ? "rejected"
-                              : a.Status === "Send Back"
-                                ? "sendback"
-                                : ""
-                      }`}
-                    >
-                      {a.Role} - {a.Name}
-                    </li>
-                  ))}
-                </ul>
+            <div className="approval-ribbon">
+              <div className={`ribbon-step ${initiatorClass}`}>
+                {itemData.EmployeeName}
               </div>
-            )}
+              {approvalMatrix.map((approver: any, index: number) => (
+                <div
+                  key={index}
+                  className={`ribbon-step ${getApproverRibbonClass(approver, index)}`}
+                >
+                  {approver.Name}
+                  <br />
+                  <small>{approver.Role}</small>
+                </div>
+              ))}
+            </div>
             <div className="borderedbox">
               <div className="heading1" style={{ marginTop: "10px" }}>
                 <label>Requestor Information</label>
@@ -485,30 +528,19 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">Vendor Code</label>
-                    <select
-                      value={selectedVendorId ?? ""}
-                      disabled={true}
-                      className="formtext-control"
-                      onChange={(e) => {
-                        const id = Number(e.target.value);
-                        const vendor = vendors.find((v) => v.Id === id);
-                        setSelectedVendorId(id);
-                        setSelectedVendorName(vendor?.VendorName || "");
-                      }}
-                    >
-                      <option value="">Select Vendor</option>
-                      {vendors.map((v) => (
-                        <option key={v.Id} value={v.Id}>
-                          {v.VendorCode}
-                        </option>
-                      ))}
-                    </select>
+                    <input
+                      type="text"
+                      value={itemData?.VendorCode || selectedVendorCode || ""}
+                      className="form-control readonly"
+                      readOnly
+                    />
                   </div>
                   <div className="col-md-4">
                     <label className="font">Vendor Name</label>
                     <input
-                      value={itemData.VendorName}
+                      value={itemData.VendorName || ""}
                       className="form-control readonly"
+                      readOnly
                     />
                   </div>
                   <div className="col-md-4">
@@ -516,6 +548,7 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                     <input
                       value={itemData.PONumber || ""}
                       className="form-control readonly"
+                      readOnly
                     />
                   </div>
                 </div>
@@ -526,35 +559,45 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                       type="date"
                       value={
                         itemData.POdate
-                          ? new Date(itemData.POdate).toLocaleDateString(
-                              "en-GB",
-                            )
+                          ? new Date(itemData.POdate).toISOString().split("T")[0]
                           : ""
                       }
                       className="form-control readonly"
+                      readOnly
                     />
                   </div>
                   <div className="col-md-4">
-                    <label className="font">PO Terms</label>
+                    <label className="font">PO Payment Terms</label>
                     <input
-                      value={itemData.POAdvanceTerms || ""}
+                      value={itemData.POPaymentTerms || ""}
                       className="form-control readonly"
+                      readOnly
                     />
                   </div>
                   <div className="col-md-4">
-                    <label className="font">PO Amount </label>
+                    <label className="font">PO Amount</label>
                     <input
-                      value={itemData.POAmtGST || ""}
+                      value={itemData.POAmount || ""}
                       className="form-control readonly"
+                      readOnly
                     />
                   </div>
                 </div>
                 <div className="row mb-20">
                   <div className="col-md-4">
-                    <label className="font">Capatalized Amount</label>
+                    <label className="font">Total Payment for the Project</label>
                     <input
-                      value={itemData.RequestAdvanceAmount || ""}
+                      value={itemData.TotalPaymentofProject || ""}
                       className="form-control readonly"
+                      readOnly
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="font">Total Amount to be Capitalized</label>
+                    <input
+                      value={itemData.TotalamounttobeCapitalized || ""}
+                      className="form-control readonly"
+                      readOnly
                     />
                   </div>
                   <div className="col-md-4">
@@ -562,6 +605,7 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                     <input
                       value={itemData.PaidAmount || ""}
                       className="form-control readonly"
+                      readOnly
                     />
                   </div>
                 </div>
@@ -607,24 +651,16 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                                   </td>
                                   <td className="px-4 py-2">
                                     {item.Created
-                                      ? new Date(
-                                          item.Created,
-                                        ).toLocaleDateString()
+                                      ? new Date(item.Created).toLocaleDateString()
                                       : ""}
                                   </td>
                                   <td className="px-4 py-2">
                                     {item.VoucherDate
-                                      ? new Date(
-                                          item.VoucherDate,
-                                        ).toLocaleDateString()
+                                      ? new Date(item.VoucherDate).toLocaleDateString()
                                       : ""}
                                   </td>
-                                  <td className="px-4 py-2">
-                                    {item.VoucherNumber}
-                                  </td>
-                                  <td className="px-4 py-2">
-                                    {item.PaidAmount}
-                                  </td>
+                                  <td className="px-4 py-2">{item.VoucherNumber}</td>
+                                  <td className="px-4 py-2">{item.PaidAmount}</td>
                                   <td className="px-4 py-2">{pending}</td>
                                 </tr>
                               );
@@ -633,6 +669,34 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                </div>
+              </div>
+              <div className="heading1" style={{ marginTop: "10px" }}>
+                <label>Voucher Details</label>
+              </div>
+              <div className="main-formcontainer">
+                <div className="row mb-20">
+                  <div className="col-md-4">
+                    <label className="font">Voucher Date</label>
+                    <input
+                      className="form-control readonly"
+                      readOnly
+                      value={
+                        itemData.VoucherDate
+                          ? new Date(itemData.VoucherDate).toISOString().split("T")[0]
+                          : ""
+                      }
+                      type="date"
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="font">Voucher Number</label>
+                    <input
+                      className="form-control readonly"
+                      readOnly
+                      value={itemData.VoucherNumber || ""}
+                    />
                   </div>
                 </div>
               </div>
@@ -657,12 +721,10 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                               {h.ActionTaken === "Paid" && "💸 "}
                               {h.ActionTaken}
                             </div>
-
                             <div>
                               <b>{h.CurrentApprover}</b>
                             </div>
                             <div>{h.Comment}</div>
-
                             <div>
                               {h.Date ? new Date(h.Date).toLocaleString() : ""}
                             </div>
@@ -670,44 +732,6 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                         ))}
                       </div>
                     )}
-                  </div>
-                </div>
-              </div>
-              <div className="heading1" style={{ marginTop: "10px" }}>
-                <label>Approver Action</label>
-              </div>
-              <div className="main-formcontainer">
-                <div className="row mb-20">
-                  <div className="col-md-4">
-                    <label className="font">Voucher Date</label>
-                    <input
-                      className="form-control readonly"
-                      value={
-                        itemData.VoucherDate
-                          ? new Date(itemData.VoucherDate).toLocaleDateString(
-                              "en-GB",
-                            )
-                          : ""
-                      }
-                    />
-                  </div>
-                  <div className="col-md-4">
-                    <label className="font">Voucher Number</label>
-                    <input
-                      className="form-control readonly"
-                      value={itemData.VouchingNumber || ""}
-                    />
-                  </div>
-                </div>
-                <div className="row mb-20">
-                  <div className="col-md-12">
-                    <label className="font">Approver Remarks</label>
-                    <label
-                      className="fonttext textbox readonly"
-                      style={{ height: "auto", width: "100%" }}
-                    >
-                      {approverRemarks}
-                    </label>
                   </div>
                 </div>
               </div>
@@ -736,6 +760,13 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                       </ul>
                     )}
                   </div>
+                </div>
+              </div>
+              <div className="heading1" style={{ marginTop: "10px" }}>
+                <label>UTR Details</label>
+              </div>
+              <div className="main-formcontainer">
+                <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">UTR Date</label>
                     <input
@@ -757,8 +788,10 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                 <div className="row mb-20">
                   <div className="col-md-12">
                     <label className="font">UTR Remarks</label>
-                    <input
+                    <textarea
                       className="form-control"
+                      rows={4}
+                      value={UTRRemarks}
                       onChange={(e) => setUTRRemarks(e.target.value)}
                     />
                   </div>
