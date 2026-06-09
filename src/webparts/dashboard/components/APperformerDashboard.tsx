@@ -2,16 +2,12 @@ import * as React from "react";
 import "./userDashboardsc.scss";
 import NewAdvanceform from "./NewAdvanceform";
 import ViewAdvanceForm from "./ViewAdvanceForm";
-//import APperformerAdvanceFormForUTR from "./APperformerAdvanceFormForUTR";
 
 import { useState } from "react";
-//import APperformerAdvanceform from "./ap";
-// import sonalogo from "../assets/SonaPNGLogo.png";
-// import userlogo from "../assets/userlogo.png";
-// import "../assets/bootstrap/css/bootstrap.css";
 
 import logo from "../assets/SonaPNGLogo.png";
 import Edit from "../assets/Pencil.png";
+import View from "../assets/Eye.png";
 import User from "../assets/Userlogo.png";
 
 import APperformerAdvanceform from "./APperformerAdvanceform";
@@ -23,34 +19,62 @@ interface UserDashboardProps {
   context: any;
 }
 
+type TabType = "My Request" | "Paid" | "Rejected";
+
+interface IWorkflowHistoryEntry {
+  CurrentApprover?: string;
+  ActionTaken?: string;
+  Comment?: string;
+  Date?: string;
+}
+
+const parseWorkflowHistory = (raw?: string | null): IWorkflowHistoryEntry[] => {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const userTookAction = (
+  workflowHistory: string | null | undefined,
+  loggedInUserName: string,
+  action: "Reject"
+): boolean => {
+  const history = parseWorkflowHistory(workflowHistory);
+  return history.some(
+    (entry) =>
+      entry.CurrentApprover?.trim().toLowerCase() === loggedInUserName.toLowerCase() &&
+      entry.ActionTaken?.trim().toLowerCase() === action.toLowerCase()
+  );
+};
+
 const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
   const sp = spfi().using(SPFx(context));
-  //const [formType, setFormType] = useState<"new" | "view" | null>(null);
-  //const [formType, setFormType] = useState<"new" | "view" | "approve" | null>(null);
-  const [formType, setFormType] = useState<
-    "approve" | "approveUTR" | "view" | null
-  >(null);
+
+  const [formType, setFormType] = useState<"approve" | "approveUTR" | "view" | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = React.useState("");
-  const [activeMenu, setActiveMenu] = React.useState("My Request");
+  const [currentUserName, setCurrentUserName] = React.useState("");
+  const [activeMenu, setActiveMenu] = React.useState<TabType>("My Request");
   const [searchText, setSearchText] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [showForm, setShowForm] = React.useState(false);
   const [data, setData] = React.useState<any[]>([]);
-  const [currentUserName, setCurrentUserName] = React.useState("");
   const [selectedItem, setSelectedItem] = React.useState<any>(null);
 
   const getLoggedInUser = async () => {
     const user = await sp.web.currentUser();
-
     setCurrentUserName(user.Title);
     setCurrentUserEmail(user.Email.toLowerCase());
-
-    return user.Email.toLowerCase();
+    return { email: user.Email.toLowerCase(), name: user.Title };
   };
+
   const handleApproveClick = async (item: any) => {
     try {
       const fullItem = await sp.web.lists
-        .getByTitle("installation")
+        .getByTitle("Installation")
         .items.getById(item.ID)();
 
       setSelectedItem(fullItem);
@@ -68,9 +92,24 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
       console.error("Approve error:", error);
     }
   };
-  const getCapexData = async (userEmail?: string) => {
+
+  const handleViewClick = async (item: any) => {
     try {
-      debugger;
+      const fullItem = await sp.web.lists
+        .getByTitle("Installation")
+        .items.getById(item.ID)
+        .select("*")();
+
+      setSelectedItem(fullItem);
+      setFormType("view");
+      setShowForm(true);
+    } catch (error) {
+      console.error("View error:", error);
+    }
+  };
+
+  const getCapexData = async (userEmail?: string, userName?: string) => {
+    try {
       const items = await sp.web.lists
         .getByTitle("Installation")
         .items.select(
@@ -83,16 +122,12 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           "PONumber",
           "TotalamounttobeCapitalized",
           "Status",
+          "WorkFlowHistory",
           "CurrentApproverId",
           "CurrentApprover/Title",
-          "CurrentApprover/EMail",
+          "CurrentApprover/EMail"
         )
         .expand("CurrentApprover")
-        .filter(
-          `Status eq 'Pending for Vouching Update' 
-   or Status eq 'Pending for UTR Update'
-   or Status eq 'Paid'`,
-        )
         .orderBy("ID", false)();
 
       const formatted = items.map((item: any) => ({
@@ -107,68 +142,58 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
         PONumber: item.PONumber || "",
         TotalamounttobeCapitalized: item.TotalamounttobeCapitalized || "",
         status: item.Status || "",
-
+        WorkFlowHistory: item.WorkFlowHistory || null,
         CurrentApprover: item.CurrentApprover?.Title || "",
         CurrentApproverEmail: item.CurrentApprover?.EMail?.toLowerCase() || "",
       }));
 
-      const myItems = formatted.filter(
-        (x: any) => x.CurrentApproverEmail === userEmail,
-      );
-
-      setData(myItems);
+      setData(formatted);
     } catch (error) {
       console.error("Data error:", error);
     }
   };
-  //  VIEW CLICK
-  const handleViewClick = async (item: any) => {
-    try {
-      const fullItem = await sp.web.lists
-        .getByTitle("CapexAdvance")
-        .items.getById(item.ID)();
 
-      setSelectedItem(fullItem);
-      setFormType("view");
-      setShowForm(true);
-    } catch (error) {
-      console.error("View error:", error);
-    }
-  };
-
-  const filteredData = data.filter((item) => {
+  const filteredData = React.useMemo(() => {
     const text = searchText.toLowerCase();
     const status = statusFilter.toLowerCase();
+    const loggedInUser = currentUserName.trim().toLowerCase();
+    const loggedInEmail = currentUserEmail.trim().toLowerCase();
 
-    let menuFilter = true;
+    return data.filter((item) => {
+      let menuFilter = false;
 
-    if (activeMenu === "Paid") {
-      menuFilter = item.status?.toLowerCase() === "paid";
-    } else if (activeMenu === "Rejected") {
-      menuFilter = item.status?.toLowerCase() === "rejected";
-    } else if (activeMenu === "My Request") {
-      menuFilter = true;
-    }
+      if (activeMenu === "My Request") {
+        const isPendingVouching = item.status?.toLowerCase() === "pending for vouching update";
+        const isPendingUTR = item.status?.toLowerCase() === "pending for utr update";
+        menuFilter =
+          (isPendingVouching || isPendingUTR) &&
+          item.CurrentApproverEmail === loggedInEmail;
+      } else if (activeMenu === "Paid") {
+        menuFilter = item.status?.toLowerCase() === "paid";
+      } else if (activeMenu === "Rejected") {
+        menuFilter = userTookAction(item.WorkFlowHistory, loggedInUser, "Reject");
+      }
 
-    return (
-      menuFilter &&
-      (item.PaymentId?.toLowerCase().includes(text) ||
+      const statusMatch = !status || item.status?.toLowerCase().includes(status);
+
+      const searchMatch =
+        !text ||
+        item.PaymentId?.toLowerCase().includes(text) ||
         item.EmployeeName?.toLowerCase().includes(text) ||
         item.VendorName?.toLowerCase().includes(text) ||
         item.VendorCode?.toLowerCase().includes(text) ||
-        item.PONumber?.toLowerCase().includes(text)) &&
-      (!status || item.status?.toLowerCase().includes(status))
-    );
-  });
+        item.PONumber?.toLowerCase().includes(text);
+
+      return menuFilter && statusMatch && searchMatch;
+    });
+  }, [data, activeMenu, searchText, statusFilter, currentUserName, currentUserEmail]);
 
   React.useEffect(() => {
     const loadData = async () => {
       if (!context) return;
-
-      const email = await getLoggedInUser();
-      await getCapexData(email);
+      const { email, name } = await getLoggedInUser();
+      await getCapexData(email, name);
     };
-
     void loadData();
   }, [context]);
 
@@ -182,7 +207,7 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           onClose={() => {
             setShowForm(false);
             setSelectedItem(null);
-            void getCapexData();
+            void getCapexData(currentUserEmail, currentUserName);
           }}
         />
       );
@@ -197,7 +222,21 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           onClose={() => {
             setShowForm(false);
             setSelectedItem(null);
-            void getCapexData();
+            void getCapexData(currentUserEmail, currentUserName);
+          }}
+        />
+      );
+    }
+
+    if (formType === "view") {
+      return (
+        <ViewAdvanceForm
+          context={context}
+          formData={selectedItem}
+          itemId={selectedItem?.ID}
+          onClose={() => {
+            setShowForm(false);
+            setSelectedItem(null);
           }}
         />
       );
@@ -226,41 +265,20 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           </div>
 
           <ul className="nav">
-            <li className="nav-item">
-              <a
-                className={
-                  activeMenu === "My Request" ? " nav-link active" : "nav-link"
-                }
-                onClick={() => setActiveMenu("My Request")}
-                style={{ cursor: "pointer" }}
-              >
-                My Request
-              </a>
-            </li>
-            <li className="nav-item">
-              <a
-                className={
-                  activeMenu === "Paid" ? " nav-link  active" : "nav-link"
-                }
-                onClick={() => setActiveMenu("Paid")}
-                style={{ cursor: "pointer" }}
-              >
-                Paid
-              </a>
-            </li>
-            <li className="nav-item">
-              <a
-                className={
-                  activeMenu === "Rejected" ? "nav-link  active" : "nav-link"
-                }
-                onClick={() => setActiveMenu("Rejected")}
-                style={{ cursor: "pointer" }}
-              >
-                Rejected
-              </a>
-            </li>
+            {(["My Request", "Paid", "Rejected"] as TabType[]).map((tab) => (
+              <li className="nav-item" key={tab}>
+                <a
+                  className={activeMenu === tab ? "nav-link active" : "nav-link"}
+                  onClick={() => setActiveMenu(tab)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {tab}
+                </a>
+              </li>
+            ))}
           </ul>
         </div>
+
         <div
           className="main"
           style={{ width: "calc(100% - 250px)", transition: "width 0.3s" }}
@@ -268,34 +286,36 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
           <div className="header">
             <div className="left-banner">
               <div className="logo-text">
-                <h2> Installation AP Dashboard</h2>
+                <h2>Installation AP Dashboard</h2>
               </div>
             </div>
           </div>
+
           <div className="col-md-12 mainsecond">
             <div>
               <input
                 placeholder="Search"
                 value={searchText}
                 className="form-control"
-                style={{ width: "250px;" }}
+                style={{ width: "250px" }}
                 onChange={(e) => setSearchText(e.target.value)}
               />
             </div>
-            <div>
-              <select
-                value={statusFilter}
-                className="formtext-control"
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="">All</option>
-                <option value="Submitted">Submitted</option>
-                <option value="Approved">Approved</option>
-                <option value="Rejected">Rejected</option>
-                <option value="Draft">Draft</option>
-              </select>
-            </div>
+            {activeMenu === "My Request" && (
+              <div>
+                <select
+                  value={statusFilter}
+                  className="formtext-control"
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="">All</option>
+                  <option value="Pending for Vouching Update">Pending for Vouching Update</option>
+                  <option value="Pending for UTR Update">Pending for UTR Update</option>
+                </select>
+              </div>
+            )}
           </div>
+
           <main className="Main-Dash mx-2">
             <div style={{ overflowX: "auto" }}>
               <div className="table-vert-scroll">
@@ -313,7 +333,7 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
                       <th className="px-4 py-2">Vendor Code</th>
                       <th className="px-4 py-2">Vendor Name</th>
                       <th className="px-4 py-2">PO Number</th>
-                      <th className="px-4 py-2">Capatalized Amount</th>
+                      <th className="px-4 py-2">Capitalised Amount</th>
                       <th className="px-4 py-2">Pending With</th>
                       <th className="px-4 py-2">Status</th>
                     </tr>
@@ -321,7 +341,7 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
                   <tbody>
                     {filteredData.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ textAlign: "center" }}>
+                        <td colSpan={11} style={{ textAlign: "center" }}>
                           No Data
                         </td>
                       </tr>
@@ -329,24 +349,27 @@ const APperformerDashboard: React.FC<UserDashboardProps> = ({ context }) => {
                       filteredData.map((item, i) => (
                         <tr key={i}>
                           <td className="px-4 py-2">
-                            {(item.status === "Pending for Vouching Update" ||
-                              item.status === "Pending for UTR Update") && (
+                            {activeMenu === "My Request" ? (
                               <span
-                                style={{ cursor: "pointer" }}
                                 onClick={() => handleApproveClick(item)}
+                                style={{ cursor: "pointer" }}
                               >
                                 <img src={Edit} width={15} alt="Edit" />
                               </span>
+                            ) : (
+                              <span
+                                onClick={() => handleViewClick(item)}
+                                style={{ cursor: "pointer" }}
+                              >
+                                <img src={View} width={15} alt="View" />
+                              </span>
                             )}
                           </td>
-
                           <td className="px-4 py-2">{item.PaymentId}</td>
                           <td className="px-4 py-2">{item.EmployeeName}</td>
                           <td className="px-4 py-2">{item.date}</td>
-
                           <td className="px-4 py-2">Install commission</td>
                           <td className="px-4 py-2">{item.VendorCode}</td>
-
                           <td className="px-4 py-2">{item.VendorName}</td>
                           <td className="px-4 py-2">{item.PONumber}</td>
                           <td className="px-4 py-2">
