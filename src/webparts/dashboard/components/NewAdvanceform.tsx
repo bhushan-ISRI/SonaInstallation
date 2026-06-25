@@ -5,6 +5,7 @@ import { spfi } from "@pnp/sp";
 import { SPFx } from "@pnp/sp/presets/all";
 import { useState } from "react";
 import logo from "../assets/sona-comstarlogo.png";
+import { SPHttpClient, ISPHttpClientOptions } from '@microsoft/sp-http';
 
 interface IVendor {
   Id: number;
@@ -68,6 +69,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [approverDetails, setApproverDetails] = useState<any[]>([]);
   const [approvers, setApprovers] = useState<number[]>([]);
+  const [pageLoading, setPageLoading] = useState(true);
 
   const poAmountTotal = (
     Number(poBasicAmount || 0) +
@@ -221,33 +223,217 @@ const NewAdvanceform = ({ context, onClose }: any) => {
     }
   };
 
-  const getLoggedInUser = async () => {
+  // const getLoggedInUser = async () => {
+  //   try {
+  //     const currentUser = await sp.web.currentUser();
+  //     const user = await sp.web.lists
+  //       .getByTitle("EmployeeMaster")
+  //       .items.select(
+  //         "EmployeeCode", "EmployeeName", "Division", "Location",
+  //         "EmployeeEmail", "ReportingManager/Id", "ReportingManager/Title",
+  //         "HOD/Id", "HOD/Title", "ContactNo", "EmployeeStatus", "CostCenter",
+  //       )
+  //       .expand("ReportingManager", "HOD")
+  //       .filter(`EmployeeEmail eq '${currentUser.Email}'`)
+  //       .top(1)();
+  //     if (user.length > 0) setEmployee(user[0]);
+  //   } catch (error) {
+  //     console.error("Error fetching user:", error);
+  //   }
+  // };
+  const ensureUser = async (email: string): Promise<number> => {
+
+    if (!email) return 0;
+
     try {
-      const currentUser = await sp.web.currentUser();
-      const user = await sp.web.lists
-        .getByTitle("EmployeeMaster")
-        .items.select(
-          "EmployeeCode", "EmployeeName", "Division", "Location",
-          "EmployeeEmail", "ReportingManager/Id", "ReportingManager/Title",
-          "HOD/Id", "HOD/Title", "ContactNo", "EmployeeStatus", "CostCenter",
-        )
-        .expand("ReportingManager", "HOD")
-        .filter(`EmployeeEmail eq '${currentUser.Email}'`)
-        .top(1)();
-      if (user.length > 0) setEmployee(user[0]);
+
+      const webUrl = context.pageContext.web.absoluteUrl;
+
+      const response = await context.spHttpClient.post(
+        `${webUrl}/_api/web/ensureuser`,
+        SPHttpClient.configurations.v1,
+        {
+          headers: {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            logonName: email
+          })
+        }
+      );
+
+      if (!response.ok) {
+
+        console.log("ensureUser failed for:", email);
+
+        return 0;
+      }
+
+      const data = await response.json();
+
+      return data.Id || 0;
+
     } catch (error) {
-      console.error("Error fetching user:", error);
+
+      console.log("ensureUser error:", email, error);
+
+      return 0;
     }
   };
+  const getLoggedInUser = async () => {
+  try {
+    const toTitleCase = (str: string): string => {
+      if (!str) return "";
+
+      return str
+        .toLowerCase()
+        .split(" ")
+        .filter(Boolean)
+        .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+    };
+
+    const cleanLocationForDisplay = (location: string): string => {
+      if (!location) return "";
+      return location.replace(/^re\s+/i, "").trim();
+    };
+
+    const FLOW_URL =
+      "https://defaultcb1edbfe8080457d9cae51528f3643.3f.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e2bb522aa41443179a72b701b9613471/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=q8b8ADCtK2eKr2f6p3MX7gxmJymPeJbm0mq2M69Rk8E";
+
+    const fetchPage = async (pageNumber: number) => {
+      const response = await fetch(FLOW_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          PageSize: 500,
+          PageNumber: pageNumber,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch employee data");
+      }
+
+      return response.json();
+    };
+
+    const currentUserEmail =
+      context.pageContext.user.email.toLowerCase();
+
+    let employee: any = null;
+    let page = 1;
+
+    while (true) {
+      const res = await fetchPage(page);
+
+      const employees = res?.data?.employees || [];
+
+      employee = employees.find(
+        (x: any) => x.email?.toLowerCase() === currentUserEmail
+      );
+
+      if (employee) break;
+
+      if (employees.length < 500) break;
+
+      page++;
+    }
+
+    if (!employee) {
+      console.log("Employee not found.");
+      return;
+    }
+
+    const attributes = employee.attributes || [];
+
+    const locationAttr = attributes.find(
+      (x: any) =>
+        x.attributeTypeDescription?.toLowerCase() === "location"
+    );
+
+    const departmentAttr = attributes.find(
+      (x: any) =>
+        x.attributeTypeDescription?.toLowerCase() === "department"
+    );
+
+    const hodEmailAttr = attributes.find(
+      (x: any) =>
+        x.attributeTypeDescription?.toLowerCase() === "hod_email"
+    );
+
+    const hodNameAttr = attributes.find(
+      (x: any) =>
+        x.attributeTypeDescription?.toLowerCase() === "hod name"
+    );
+
+    let rmUserId = 0;
+    let hodUserId = 0;
+
+    try {
+      if (employee.reportingManagerEmail) {
+        rmUserId = await ensureUser(employee.reportingManagerEmail);
+      }
+
+      if (hodEmailAttr?.attributeTypeUnitDescription) {
+        hodUserId = await ensureUser(
+          hodEmailAttr.attributeTypeUnitDescription
+        );
+      }
+    } catch (err) {
+      console.log("ensureUser error:", err);
+    }
+
+    setEmployee({
+      EmployeeCode: employee.employeeCode || "",
+      EmployeeName: toTitleCase(employee.employeeName || ""),
+      Division: departmentAttr?.attributeTypeUnitDescription || "",
+      Location: cleanLocationForDisplay(
+        locationAttr?.attributeTypeUnitDescription || ""
+      ),
+      EmployeeEmail: employee.email || "",
+      ContactNo: employee.mobileNo || "",
+      EmployeeStatus: employee.employeeStatus || "",
+      CostCenter: employee.costCenter || "",
+
+      ReportingManager: {
+        Id: rmUserId,
+        Title: employee.reportingManagerName || "",
+      },
+
+      HOD: {
+        Id: hodUserId,
+        Title: hodNameAttr?.attributeTypeUnitDescription || "",
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching user:", error);
+  }
+};
 
   const buildApprovalFlow = async () => {
     try {
       const baseApprovers: any[] = [];
       if (employee.ReportingManager?.Id) {
-        baseApprovers.push({ Id: employee.ReportingManager.Id, Name: employee.ReportingManager.Title, Role: "RM", Level: 1, status: "Pending" });
+        baseApprovers.push({
+          Id: employee.ReportingManager.Id,
+          Name: employee.ReportingManager.Title,
+          Role: "RM",
+          Level: 1,
+          status: "Pending"
+        });
       }
       if (employee.HOD?.Id) {
-        baseApprovers.push({ Id: employee.HOD.Id, Name: employee.HOD.Title, Role: "HOD", Level: 2, status: "" });
+        baseApprovers.push({
+          Id: employee.HOD.Id,
+          Name: employee.HOD.Title,
+          Role: "HOD",
+          Level: 2,
+          status: ""
+        });
       }
       const matrixData = await sp.web.lists
         .getByTitle("InstallationCommisionApprovalMatrix")
@@ -256,8 +442,11 @@ const NewAdvanceform = ({ context, onClose }: any) => {
         .filter("Status eq 'Active'")
         .orderBy("Level", true)();
       const matrixApprovers = matrixData.map((item: any, index: number) => ({
-        Id: item.Approver?.Id, Name: item.Approver?.Title,
-        Role: item.Role?.RoleName, Level: baseApprovers.length + index + 1, status: "",
+        Id: item.Approver?.Id,
+        Name: item.Approver?.Title,
+        Role: item.Role?.RoleName,
+        Level: baseApprovers.length + index + 1,
+        status: "",
       }));
       const fullFlow = [...baseApprovers, ...matrixApprovers];
       if (fullFlow.length > 0) fullFlow[0].status = "Pending";
@@ -299,6 +488,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
       const nextNumber =
         incrementalData.length > 0 && incrementalData[0].IncrementalID
           ? Number(incrementalData[0].IncrementalID) + 1 : 1;
+
       await sp.web.lists.getByTitle("InstallationIncrementalID").items.add({
         Title: `INT-${nextNumber}`, IncrementalID: nextNumber.toString(),
       });
@@ -401,7 +591,12 @@ const NewAdvanceform = ({ context, onClose }: any) => {
         icon: "question", showCancelButton: true, confirmButtonText: "Submit", cancelButtonText: "Cancel",
       });
       if (!confirmSubmit.isConfirmed) return;
-      Swal.fire({ title: "Submitting...", text: "Please wait", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      Swal.fire({ 
+        title: "Submitting...",
+         text: "Please wait", 
+         allowOutsideClick: false,
+          didOpen: () => Swal.showLoading() 
+        });
       const PaymentId = await generatePaymentId();
       const flow = await buildApprovalFlow();
       const payload = buildItemPayload(PaymentId, flow, "Pending for Approval", "Submitted");
@@ -428,7 +623,12 @@ const NewAdvanceform = ({ context, onClose }: any) => {
       const payload = buildItemPayload(PaymentId, flow, "Save as Draft", "Saved as draft");
       await sp.web.lists.getByTitle("Installation").items.add(payload);
       if (attachments.length > 0) await uploadAttachments(PaymentId);
-      await Swal.fire({ title: "Draft Saved", text: "Request saved successfully as Draft.", icon: "success", confirmButtonText: "OK" });
+
+      await Swal.fire({
+         title: "Draft Saved",  
+         text: "Request saved successfully as Draft.", 
+         icon: "success", confirmButtonText: "OK"
+         });
       onClose();
     } catch (error: any) {
       console.error(error);
@@ -445,15 +645,63 @@ const NewAdvanceform = ({ context, onClose }: any) => {
   };
 
   React.useEffect(() => {
-    if (!context) return;
-    void getLoggedInUser();
-    void getVendors();
-    void getPaidPOs();
-  }, [context]);
+  if (!context) return;
 
-  React.useEffect(() => {
-    if (employee?.EmployeeCode) void buildApprovalFlow();
-  }, [employee]);
+  void loadPage();
+
+}, [context]);
+
+ const loadPage = async () => {
+  try {
+    setPageLoading(true);
+
+    await Promise.all([
+      getLoggedInUser(),
+      getVendors(),
+      getPaidPOs(),
+    ]);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setPageLoading(false);
+  }
+};
+
+ React.useEffect(() => {
+  const loadApproval = async () => {
+    if (!employee?.EmployeeCode) return;
+
+    setPageLoading(true);
+
+    try {
+      await buildApprovalFlow();
+    } finally {
+      setPageLoading(false);
+    }
+  };
+
+  void loadApproval();
+}, [employee]);
+
+    if (pageLoading) {
+
+    return (
+
+      <div className="skeletonWrapper">
+        <div className="skeletonLine" style={{ width: "40%" }} />
+        <div className="skeletonLine" style={{ width: "80%" }} />
+
+        <div className="skeletonCard"></div>
+
+        <div className="keletonLine" style={{ width: "60%" }} />
+        <div className="skeletonCard"></div>
+
+        <div className="skeletonLine" style={{ width: "50%" }} />
+        <div className="skeletonCard"></div>
+      </div>
+
+    );
+  }
 
   return (
     <div className="MainUplodForm" style={{ margin: "5px 0px" }}>
@@ -554,8 +802,8 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                         {poLoading
                           ? "Loading PO Numbers..."
                           : poList.length === 0
-                          ? "No Paid POs found"
-                          : "Select PO Number"}
+                            ? "No Paid POs found"
+                            : "Select PO Number"}
                       </option>
                       {poList.map((item) => (
                         <option key={item.Id} value={item.PONumber}>{item.PONumber}</option>
@@ -582,30 +830,30 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">PO Basic Amount</label>
-                    <input value={poBasicAmount} className="form-control readonly computed-field" readOnly  />
+                    <input value={poBasicAmount} className="form-control readonly computed-field" readOnly />
                   </div>
                   <div className="col-md-4">
                     <label className="font">PO GST Amount</label>
-                    <input value={poGSTAmount} className="form-control readonly computed-field" readOnly  />
+                    <input value={poGSTAmount} className="form-control readonly computed-field" readOnly />
                   </div>
                   <div className="col-md-4">
                     <label className="font">PO Other Amount</label>
-                    <input value={poOtherAmount} className="form-control readonly computed-field" readOnly  />
+                    <input value={poOtherAmount} className="form-control readonly computed-field" readOnly />
                   </div>
                 </div>
 
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">MRN Basic Amount</label>
-                    <input value={mrnBasicAmount} className="form-control readonly computed-field" readOnly  />
+                    <input value={mrnBasicAmount} className="form-control readonly computed-field" readOnly />
                   </div>
                   <div className="col-md-4">
                     <label className="font">MRN GST Amount</label>
-                    <input value={mrnGSTAmount} className="form-control readonly computed-field" readOnly  />
+                    <input value={mrnGSTAmount} className="form-control readonly computed-field" readOnly />
                   </div>
                   <div className="col-md-4">
                     <label className="font">MRN Other Amount</label>
-                    <input value={mrnOtherAmount} className="form-control readonly computed-field" readOnly  />
+                    <input value={mrnOtherAmount} className="form-control readonly computed-field" readOnly />
                   </div>
                 </div>
 
