@@ -2,7 +2,7 @@ import * as React from "react";
 import "./advanced.scss";
 import { spfi } from "@pnp/sp";
 import { SPFx } from "@pnp/sp/presets/all";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   PeoplePicker,
   PrincipalType,
@@ -51,6 +51,17 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
   const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
   const [selectedVendorCode, setSelectedVendorCode] = useState("");
   const [selectedVendorName, setSelectedVendorName] = useState("");
+
+  const [vendorSearch, setVendorSearch] = useState("");
+  const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
+  const vendorDropdownRef = useRef<HTMLDivElement>(null);
+  const vendorSearchRef = useRef<HTMLInputElement>(null);
+
+  const filteredVendors = vendors.filter(
+    (v) =>
+      v.VendorName.toLowerCase().includes(vendorSearch.toLowerCase()) ||
+      v.VendorCode.toLowerCase().includes(vendorSearch.toLowerCase()),
+  );
 
   const [poList, setPoList] = useState<IPOData[]>([]);
   const [poLoading, setPoLoading] = useState(false);
@@ -270,46 +281,10 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
     }
   };
 
-  // const getLoggedInUser = async () => {
-  //   try {
-  //     const currentUser = await sp.web.currentUser();
-  //     const email = currentUser.Email;
-
-  //     const user = await sp.web.lists
-  //       .getByTitle("EmployeeMaster")
-  //       .items.select(
-  //         "EmployeeCode",
-  //         "EmployeeName",
-  //         "Division",
-  //         "Location",
-  //         "EmployeeEmail",
-  //         "ReportingManager/Id",
-  //         "ReportingManager/Title",
-  //         "HOD/Id",
-  //         "HOD/Title",
-  //         "ContactNo",
-  //         "EmployeeStatus",
-  //         "CostCenter",
-  //       )
-  //       .expand("ReportingManager", "HOD")
-  //       .filter(`EmployeeEmail eq '${email}'`)
-  //       .top(1)();
-
-  //     if (user.length > 0) {
-  //       setEmployee(user[0]);
-  //     }
-  //   } catch (error) {
-  //     console.log("Error fetching user:", error);
-  //   }
-  // };
- const ensureUser = async (email: string): Promise<number> => {
-
+  const ensureUser = async (email: string): Promise<number> => {
     if (!email) return 0;
-
     try {
-
       const webUrl = context.pageContext.web.absoluteUrl;
-
       const response = await context.spHttpClient.post(
         `${webUrl}/_api/web/ensureuser`,
         SPHttpClient.configurations.v1,
@@ -323,157 +298,150 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
           })
         }
       );
-
       if (!response.ok) {
-
         console.log("ensureUser failed for:", email);
-
         return 0;
       }
-
       const data = await response.json();
-
       return data.Id || 0;
-
     } catch (error) {
-
       console.log("ensureUser error:", email, error);
-
       return 0;
     }
   };
+
   const getLoggedInUser = async () => {
-  try {
-    const toTitleCase = (str: string): string => {
-      if (!str) return "";
+    try {
+      const toTitleCase = (str: string): string => {
+        if (!str) return "";
+        return str
+          .toLowerCase()
+          .split(" ")
+          .filter(Boolean)
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
+      };
 
-      return str
-        .toLowerCase()
-        .split(" ")
-        .filter(Boolean)
-        .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ");
-    };
+      const cleanLocationForDisplay = (location: string): string => {
+        if (!location) return "";
+        return location.replace(/^re\s+/i, "").trim();
+      };
 
-    const cleanLocationForDisplay = (location: string): string => {
-      if (!location) return "";
-      return location.replace(/^re\s+/i, "").trim();
-    };
+      const FLOW_URL =
+        "https://defaultcb1edbfe8080457d9cae51528f3643.3f.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e2bb522aa41443179a72b701b9613471/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=q8b8ADCtK2eKr2f6p3MX7gxmJymPeJbm0mq2M69Rk8E";
 
-    const FLOW_URL =
-      "https://defaultcb1edbfe8080457d9cae51528f3643.3f.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e2bb522aa41443179a72b701b9613471/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=q8b8ADCtK2eKr2f6p3MX7gxmJymPeJbm0mq2M69Rk8E";
+      const fetchPage = async (pageNumber: number) => {
+        const response = await fetch(FLOW_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            PageSize: 500,
+            PageNumber: pageNumber,
+          }),
+        });
 
-    const fetchPage = async (pageNumber: number) => {
-      const response = await fetch(FLOW_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          PageSize: 500,
-          PageNumber: pageNumber,
-        }),
-      });
+        if (!response.ok) {
+          throw new Error("Failed to fetch employee data");
+        }
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch employee data");
+        return response.json();
+      };
+
+      const currentUserEmail =
+        context.pageContext.user.email.toLowerCase();
+
+      let employee: any = null;
+      let page = 1;
+
+      while (true) {
+        const res = await fetchPage(page);
+
+        const employees = res?.data?.employees || [];
+
+        employee = employees.find(
+          (x: any) => x.email?.toLowerCase() === currentUserEmail
+        );
+
+        if (employee) break;
+
+        if (employees.length < 500) break;
+
+        page++;
       }
 
-      return response.json();
-    };
+      if (!employee) {
+        console.log("Employee not found.");
+        return;
+      }
 
-    const currentUserEmail =
-      context.pageContext.user.email.toLowerCase();
+      const attributes = employee.attributes || [];
 
-    let employee: any = null;
-    let page = 1;
-
-    while (true) {
-      const res = await fetchPage(page);
-
-      const employees = res?.data?.employees || [];
-
-      employee = employees.find(
-        (x: any) => x.email?.toLowerCase() === currentUserEmail
+      const locationAttr = attributes.find(
+        (x: any) =>
+          x.attributeTypeDescription?.toLowerCase() === "location"
       );
 
-      if (employee) break;
+      const departmentAttr = attributes.find(
+        (x: any) =>
+          x.attributeTypeDescription?.toLowerCase() === "department"
+      );
 
-      if (employees.length < 500) break;
+      const hodEmailAttr = attributes.find(
+        (x: any) =>
+          x.attributeTypeDescription?.toLowerCase() === "hod_email"
+      );
 
-      page++;
-    }
+      const hodNameAttr = attributes.find(
+        (x: any) =>
+          x.attributeTypeDescription?.toLowerCase() === "hod name"
+      );
 
-    if (!employee) {
-      console.log("Employee not found.");
-      return;
-    }
+      let rmUserId = 0;
+      let hodUserId = 0;
 
-    const attributes = employee.attributes || [];
+      try {
+        if (employee.reportingManagerEmail) {
+          rmUserId = await ensureUser(employee.reportingManagerEmail);
+        }
 
-    const locationAttr = attributes.find(
-      (x: any) =>
-        x.attributeTypeDescription?.toLowerCase() === "location"
-    );
-
-    const departmentAttr = attributes.find(
-      (x: any) =>
-        x.attributeTypeDescription?.toLowerCase() === "department"
-    );
-
-    const hodEmailAttr = attributes.find(
-      (x: any) =>
-        x.attributeTypeDescription?.toLowerCase() === "hod_email"
-    );
-
-    const hodNameAttr = attributes.find(
-      (x: any) =>
-        x.attributeTypeDescription?.toLowerCase() === "hod name"
-    );
-
-    let rmUserId = 0;
-    let hodUserId = 0;
-
-    try {
-      if (employee.reportingManagerEmail) {
-        rmUserId = await ensureUser(employee.reportingManagerEmail);
+        if (hodEmailAttr?.attributeTypeUnitDescription) {
+          hodUserId = await ensureUser(
+            hodEmailAttr.attributeTypeUnitDescription
+          );
+        }
+      } catch (err) {
+        console.log("ensureUser error:", err);
       }
 
-      if (hodEmailAttr?.attributeTypeUnitDescription) {
-        hodUserId = await ensureUser(
-          hodEmailAttr.attributeTypeUnitDescription
-        );
-      }
-    } catch (err) {
-      console.log("ensureUser error:", err);
+      setEmployee({
+        EmployeeCode: employee.employeeCode || "",
+        EmployeeName: toTitleCase(employee.employeeName || ""),
+        Division: departmentAttr?.attributeTypeUnitDescription || "",
+        Location: cleanLocationForDisplay(
+          locationAttr?.attributeTypeUnitDescription || ""
+        ),
+        EmployeeEmail: employee.email || "",
+        ContactNo: employee.mobileNo || "",
+        EmployeeStatus: employee.employeeStatus || "",
+        CostCenter: employee.costCenter || "",
+
+        ReportingManager: {
+          Id: rmUserId,
+          Title: employee.reportingManagerName || "",
+        },
+
+        HOD: {
+          Id: hodUserId,
+          Title: hodNameAttr?.attributeTypeUnitDescription || "",
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching user:", error);
     }
+  };
 
-    setEmployee({
-      EmployeeCode: employee.employeeCode || "",
-      EmployeeName: toTitleCase(employee.employeeName || ""),
-      Division: departmentAttr?.attributeTypeUnitDescription || "",
-      Location: cleanLocationForDisplay(
-        locationAttr?.attributeTypeUnitDescription || ""
-      ),
-      EmployeeEmail: employee.email || "",
-      ContactNo: employee.mobileNo || "",
-      EmployeeStatus: employee.employeeStatus || "",
-      CostCenter: employee.costCenter || "",
-
-      ReportingManager: {
-        Id: rmUserId,
-        Title: employee.reportingManagerName || "",
-      },
-
-      HOD: {
-        Id: hodUserId,
-        Title: hodNameAttr?.attributeTypeUnitDescription || "",
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching user:", error);
-  }
-};
   const buildApprovalFlow = async () => {
     try {
       const baseApprovers: any[] = [];
@@ -842,6 +810,26 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
     }
   }, [employee]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        vendorDropdownRef.current &&
+        !vendorDropdownRef.current.contains(event.target as Node)
+      ) {
+        setVendorDropdownOpen(false);
+        setVendorSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (vendorDropdownOpen && vendorSearchRef.current) {
+      vendorSearchRef.current.focus();
+    }
+  }, [vendorDropdownOpen]);
+
   return (
     <div className="MainUplodForm" style={{ margin: "5px 0px" }}>
       <div className="row">
@@ -958,24 +946,125 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
                 <div className="row mb-20">
                   <div className="col-md-4">
                     <label className="font">Vendor Name</label>
-                    <select
-                      value={selectedVendorId || ""}
-                      className="formtext-control"
-                      onChange={(e) => {
-                        const id = Number(e.target.value);
-                        const vendor = vendors.find((v) => v.Id === id);
-                        setSelectedVendorId(id || null);
-                        setSelectedVendorCode(vendor?.VendorCode || "");
-                        setSelectedVendorName(vendor?.VendorName || "");
-                      }}
-                    >
-                      <option value="">Select Vendor</option>
-                      {vendors.map((v) => (
-                        <option key={v.Id} value={v.Id}>
-                          {v.VendorName}
-                        </option>
-                      ))}
-                    </select>
+                    <div ref={vendorDropdownRef} style={{ position: "relative" }}>
+                      <div
+                        className="formtext-control"
+                        onClick={() => setVendorDropdownOpen((prev) => !prev)}
+                        style={{
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          userSelect: "none",
+                          minHeight: "38px",
+                          padding: "6px 10px",
+                        }}
+                      >
+                        <span style={{ color: selectedVendorName ? "inherit" : "#999" }}>
+                          {selectedVendorName || "Select Vendor"}
+                        </span>
+                        <span style={{ fontSize: "10px", marginLeft: "8px" }}>
+                          {vendorDropdownOpen ? "▲" : "▼"}
+                        </span>
+                      </div>
+
+                      {vendorDropdownOpen && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: "100%",
+                            left: 0,
+                            right: 0,
+                            zIndex: 1000,
+                            backgroundColor: "#fff",
+                            border: "1px solid #ccc",
+                            borderRadius: "4px",
+                            boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
+                          }}
+                        >
+                          <div style={{ padding: "6px" }}>
+                            <input
+                              ref={vendorSearchRef}
+                              type="text"
+                              value={vendorSearch}
+                              onChange={(e) => setVendorSearch(e.target.value)}
+                              placeholder="Search vendor..."
+                              className="form-control"
+                              style={{ fontSize: "13px" }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <ul
+                            style={{
+                              listStyle: "none",
+                              margin: 0,
+                              padding: 0,
+                              maxHeight: "200px",
+                              overflowY: "auto",
+                            }}
+                          >
+                            <li
+                              onClick={() => {
+                                setSelectedVendorId(null);
+                                setSelectedVendorName("");
+                                setSelectedVendorCode("");
+                                setVendorDropdownOpen(false);
+                                setVendorSearch("");
+                              }}
+                              style={{
+                                padding: "8px 12px",
+                                cursor: "pointer",
+                                color: "#999",
+                                borderBottom: "1px solid #f0f0f0",
+                              }}
+                              onMouseEnter={(e) =>
+                                ((e.currentTarget as HTMLLIElement).style.backgroundColor = "#f5f5f5")
+                              }
+                              onMouseLeave={(e) =>
+                                ((e.currentTarget as HTMLLIElement).style.backgroundColor = "transparent")
+                              }
+                            >
+                              Select Vendor
+                            </li>
+                            {filteredVendors.length === 0 ? (
+                              <li style={{ padding: "8px 12px", color: "#999", fontSize: "13px" }}>
+                                No vendors found
+                              </li>
+                            ) : (
+                              filteredVendors.map((v) => (
+                                <li
+                                  key={v.Id}
+                                  onClick={() => {
+                                    setSelectedVendorId(v.Id);
+                                    setSelectedVendorName(v.VendorName);
+                                    setSelectedVendorCode(v.VendorCode);
+                                    setVendorDropdownOpen(false);
+                                    setVendorSearch("");
+                                  }}
+                                  style={{
+                                    padding: "8px 12px",
+                                    cursor: "pointer",
+                                    fontSize: "13px",
+                                    backgroundColor: selectedVendorId === v.Id ? "#e8f0fe" : "transparent",
+                                    borderBottom: "1px solid #f0f0f0",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (selectedVendorId !== v.Id)
+                                      (e.currentTarget as HTMLLIElement).style.backgroundColor = "#f5f5f5";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (selectedVendorId !== v.Id)
+                                      (e.currentTarget as HTMLLIElement).style.backgroundColor = "transparent";
+                                  }}
+                                >
+                                  {v.VendorName}
+                                </li>
+                              ))
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="col-md-4">
@@ -1461,7 +1550,7 @@ const EditAdvanceForm = ({ context, formData, onClose }: any) => {
                     />
                   </div>
                 </div>
-              </div>
+              </div>    
 
               <div
                 style={{
