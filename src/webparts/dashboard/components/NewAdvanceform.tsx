@@ -35,7 +35,8 @@ interface IPOData {
 
 const NewAdvanceform = ({ context, onClose }: any) => {
   const sp = spfi().using(SPFx(context));
-
+  const tenantUrl = context.pageContext.site.absoluteUrl.split("/sites/")[0];
+  const vendorSp = spfi(`${tenantUrl}/sites/RLY_AccountsPayable_UAT`).using(SPFx(context));
   const [employee, setEmployee] = React.useState<any>({});
   const [attachments, setAttachments] = useState<File[]>([]);
   const [previousAdvances, setPreviousAdvances] = useState<any[]>([]);
@@ -443,7 +444,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
 
   const getVendors = async () => {
     try {
-      const data = await sp.web.lists
+      const data = await vendorSp.web.lists
         .getByTitle("VendorMaster")
         .items.select("Id", "VendorCode", "VendorName")();
       setVendors(data);
@@ -1239,7 +1240,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                             <th className="px-4 py-2">PO Number</th>
                             <th className="px-4 py-2">PO Date</th>
                             <th className="px-4 py-2">PO Amount</th>
-                            <th className="px-4 py-2">MRN No</th>
+                            {/* <th className="px-4 py-2">MRN No</th> */}
                             <th className="px-4 py-2">MRN Date</th>
                             <th className="px-4 py-2">MRN Amount</th>
                             <th className="px-4 py-2">Advance Adjustment</th>
@@ -1264,7 +1265,7 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                                     : ""}
                                 </td>
                                 <td className="px-4 py-2">{item.POAmount}</td>
-                                <td className="px-4 py-2">{item.MRNNumber}</td>
+                                {/* <td className="px-4 py-2">{item.MRNNumber}</td> */}
                                 <td className="px-4 py-2">
                                   {item.MRNDtae
                                     ? new Date(
@@ -1304,9 +1305,9 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                             <th className="px-4 py-2">Previous Advance</th>
                             <th className="px-4 py-2">Amount Requested Date</th>
                             <th className="px-4 py-2">Amount Paid Date</th>
-                            <th className="px-4 py-2">MRN No</th>
-                            <th className="px-4 py-2">Settled Amount</th>
-                            <th className="px-4 py-2">Pending Advance</th>
+                            {/* <th className="px-4 py-2">MRN No</th> */}
+                            {/* <th className="px-4 py-2">Settled Amount</th> */}
+                            {/* <th className="px-4 py-2">Pending Advance</th> */}
                           </tr>
                         </thead>
                         <tbody>
@@ -1343,16 +1344,16 @@ const NewAdvanceform = ({ context, onClose }: any) => {
                                         ).toLocaleDateString()
                                       : ""}
                                   </td>
-                                  <td className="px-4 py-2"></td>
+                                  {/* <td className="px-4 py-2"></td>
                                   <td className="px-4 py-2">
                                     {item.PaidAmount}
                                   </td>
-                                  <td className="px-4 py-2">{pending}</td>
+                                  <td className="px-4 py-2">{pending}</td> */}
                                 </tr>
-                              );
+                              );     
                             })
                           )}
-                        </tbody>
+                        </tbody>       
                       </table>
                     </div>
                   </div>

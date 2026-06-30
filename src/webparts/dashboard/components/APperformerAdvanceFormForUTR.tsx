@@ -584,7 +584,7 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                             <th className="px-4 py-2">PO Number</th>
                             <th className="px-4 py-2">PO Date</th>
                             <th className="px-4 py-2">PO Amount</th>
-                            <th className="px-4 py-2">MRN No</th>
+                            {/* <th className="px-4 py-2">MRN No</th> */}
                             <th className="px-4 py-2">MRN Date</th>
                             <th className="px-4 py-2">MRN Amount</th>
                             <th className="px-4 py-2">Advance Adjustment</th>
@@ -601,7 +601,7 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                                 <td className="px-4 py-2">{item.PONumber}</td>
                                 <td className="px-4 py-2">{item.PODate ? new Date(item.PODate).toLocaleDateString() : ""}</td>
                                 <td className="px-4 py-2">{item.POAmount}</td>
-                                <td className="px-4 py-2">{item.MRNNumber}</td>
+                                {/* <td className="px-4 py-2">{item.MRNNumber}</td> */}
                                 <td className="px-4 py-2">{item.MRNDtae ? new Date(item.MRNDtae).toLocaleDateString() : ""}</td>
                                 <td className="px-4 py-2">{item.MRNAmountwithGST}</td>
                                 <td className="px-4 py-2"></td>
@@ -631,9 +631,9 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                             <th className="px-4 py-2">Previous Advance</th>
                             <th className="px-4 py-2">Amount Requested Date</th>
                             <th className="px-4 py-2">Amount Paid Date</th>
-                            <th className="px-4 py-2">MRN No</th>
+                            {/* <th className="px-4 py-2">MRN No</th>
                             <th className="px-4 py-2">Settled Amount</th>
-                            <th className="px-4 py-2">Pending Advance</th>
+                            <th className="px-4 py-2">Pending Advance</th> */}
                           </tr>
                         </thead>
                         <tbody>
@@ -648,9 +648,9 @@ const APperformerAdvanceFormForUTR: React.FC<IProps> = ({
                                   <td className="px-4 py-2">{item.RequestAdvanceAmount}</td>
                                   <td className="px-4 py-2">{item.Created ? new Date(item.Created).toLocaleDateString() : ""}</td>
                                   <td className="px-4 py-2">{item.VoucherDate ? new Date(item.VoucherDate).toLocaleDateString() : ""}</td>
-                                  <td className="px-4 py-2"></td>
+                                  {/* <td className="px-4 py-2"></td>
                                   <td className="px-4 py-2">{item.PaidAmount}</td>
-                                  <td className="px-4 py-2">{pending}</td>
+                                  <td className="px-4 py-2">{pending}</td> */}
                                 </tr>
                               );
                             })
