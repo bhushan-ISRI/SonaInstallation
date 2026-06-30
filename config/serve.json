@@ -4,5 +4,5 @@
   "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/spfx-serve.schema.json",
   "port": 4321,
   "https": true,
-  "initialPage": "https://isriglobal.sharepoint.com/sites/SonaFinance/_layouts/workbench.aspx"
+  "initialPage": "https://sonacomstargroup.sharepoint.com/sites/RLY_Capex_UAT/_layouts/workbench.aspx"
 }
